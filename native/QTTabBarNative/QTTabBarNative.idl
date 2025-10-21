@@ -1,0 +1,19 @@
+import "oaidl.idl";
+import "ocidl.idl";
+
+[uuid(7AB1C387-4B4C-457D-91C7-54B18A9764B2), version(1.0)]
+library QTTabBarNativeLib
+{
+    importlib("stdole2.tlb");
+
+    [uuid(E4F0E46A-1EAC-4F67-8C47-58C672A6433B)]
+    interface IQTTabBarClass : IUnknown
+    {
+    };
+
+    [uuid(D2BF470E-ED1C-487F-A333-2BD8835EB6CE)]
+    coclass QTTabBarClass
+    {
+        [default] interface IQTTabBarClass;
+    };
+};

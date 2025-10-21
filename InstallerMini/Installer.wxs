@@ -99,6 +99,16 @@ Language="1033"
                       <RemoveRegistryKey Id="Remove_Plugins_RegValue" Action="removeOnInstall" Root="HKCU" Key="Software\QTTabBar\Plugins" />
                     </Component>
 
+                    <Component Id="QTTabBarNative" Guid="27af1a85-9a09-4c79-bdeb-d73fd4bd9574" Win64="yes" DisableRegistryReflection="yes">
+                        <File Id="f4_native" KeyPath="yes" Name="QTTabBarNative.dll" Source="..\native\QTTabBarNative\x64\Release\QTTabBarNative.dll">
+                            <Class Id="{D2BF470E-ED1C-487F-A333-2BD8835EB6CE}" Context="InprocServer32" Description="QTTabBar" ThreadingModel="both">
+                                <ProgId Id="QTTabBarLib.QTTabBarClass" Description="QTTabBarLib.QTTabBarClass" />
+                                <ImplementedCategory Id="{00021492-0000-0000-C000-000000000046}" />
+                                <ImplementedCategory Id="{62C8FE65-4EBB-45E7-B440-6E39B2CDBF29}" />
+                            </Class>
+                        </File>
+                    </Component>
+
                   <!-- Add by qwop   end -->
                   <?foreach arch in x86;x64 ?>
                         <?if $(var.arch) = x64?>
@@ -182,32 +192,50 @@ Language="1033"
                                     <?else?>
                                         <Condition><![CDATA[VersionNT<>601]]></Condition>
                                     <?endif?>
+                                <?elseif $(var.compName) = QTTabBarClass?>
+                                    <?if $(var.arch) = x64?>
+                                        <Condition>VersionNT64</Condition>
+                                    <?endif?>
                                 <?elseif $(var.arch) = x64?>
                                     <Condition>VersionNT64</Condition>
                                 <?endif?>
 
-                                <Class Id="$(var.compGUID)" Context="InprocServer32" Description="$(var.compDesc)" ThreadingModel="both" ForeignServer="mscoree.dll" >
-                                    <ProgId Id="QTTabBarLib.$(var.compName)" Description="QTTabBarLib.$(var.compName)" />
-                                </Class>
-                                <RegistryKey Root="HKCR" Key="CLSID\$(var.compGUID)" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
-                                    <?if $(var.compName) = QTCoTaskBarClass?>
-                                        <RegistryKey Key="Implemented Categories\{00021492-0000-0000-C000-000000000046}" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes" />
-                                    <?endif?>                                        
-                                    <RegistryKey Key="Implemented Categories\{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes" />
-                                    <RegistryValue Name="MenuText" Value="$(var.compDesc)" Type="string" Action="write" />
-                                    <RegistryValue Name="HelpText" Value="$(var.compDesc)" Type="string" Action="write" />
-                                    <RegistryKey Key="InprocServer32" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
-                                        <RegistryValue Name="Class" Value="QTTabBarLib.$(var.compName)" Type="string" Action="write" />
-                                        <RegistryValue Name="Assembly" Value="$(var.StrongName)" Type="string" Action="write" />
-                                         <!--- v2.0.50727 v4.0.30319 --> 
-                                        <RegistryValue Name="RuntimeVersion" Value="v2.0.50727" Type="string" Action="write" />
-                                        <RegistryKey Key="$(var.ProductVersion)" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
+                                <?if $(var.compName) = QTTabBarClass AND $(var.arch) = x64?>
+                                    <RegistryKey Root="HKCR" Key="CLSID\$(var.compGUID)" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
+                                        <RegistryValue Name="MenuText" Value="$(var.compDesc)" Type="string" Action="write" KeyPath="yes" />
+                                        <RegistryValue Name="HelpText" Value="$(var.compDesc)" Type="string" Action="write" />
+                                        <RegistryValue Name="AppID" Value="{53A08D7D-6A5C-466E-B706-280BF1C4D775}" Type="string" Action="write" />
+                                    </RegistryKey>
+                                    <RegistryKey Root="HKCR" Key="QTTabBarLib.$(var.compName)" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
+                                        <RegistryValue Name="CLSID" Value="$(var.compGUID)" Type="string" Action="write" />
+                                    </RegistryKey>
+                                    <RegistryKey Root="HKCR" Key="AppID\{53A08D7D-6A5C-466E-B706-280BF1C4D775}" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
+                                        <RegistryValue Value="QTTabBarNative" Type="string" Action="write" />
+                                    </RegistryKey>
+                                <?else?>
+                                    <Class Id="$(var.compGUID)" Context="InprocServer32" Description="$(var.compDesc)" ThreadingModel="both" ForeignServer="mscoree.dll" >
+                                        <ProgId Id="QTTabBarLib.$(var.compName)" Description="QTTabBarLib.$(var.compName)" />
+                                    </Class>
+                                    <RegistryKey Root="HKCR" Key="CLSID\$(var.compGUID)" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
+                                        <?if $(var.compName) = QTCoTaskBarClass?>
+                                            <RegistryKey Key="Implemented Categories\{00021492-0000-0000-C000-000000000046}" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes" />
+                                        <?endif?>
+                                        <RegistryKey Key="Implemented Categories\{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes" />
+                                        <RegistryValue Name="MenuText" Value="$(var.compDesc)" Type="string" Action="write" />
+                                        <RegistryValue Name="HelpText" Value="$(var.compDesc)" Type="string" Action="write" />
+                                        <RegistryKey Key="InprocServer32" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
                                             <RegistryValue Name="Class" Value="QTTabBarLib.$(var.compName)" Type="string" Action="write" />
                                             <RegistryValue Name="Assembly" Value="$(var.StrongName)" Type="string" Action="write" />
+                                             <!--- v2.0.50727 v4.0.30319 -->
                                             <RegistryValue Name="RuntimeVersion" Value="v2.0.50727" Type="string" Action="write" />
+                                            <RegistryKey Key="$(var.ProductVersion)" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
+                                                <RegistryValue Name="Class" Value="QTTabBarLib.$(var.compName)" Type="string" Action="write" />
+                                                <RegistryValue Name="Assembly" Value="$(var.StrongName)" Type="string" Action="write" />
+                                                <RegistryValue Name="RuntimeVersion" Value="v2.0.50727" Type="string" Action="write" />
+                                            </RegistryKey>
                                         </RegistryKey>
                                     </RegistryKey>
-                                </RegistryKey>
+                                <?endif?>
                             </Component>
                         <?endforeach ?>
                     <?endforeach ?>
@@ -221,7 +249,8 @@ Language="1033"
             <ComponentRef Id="BandObjectLib" />
             <ComponentRef Id="QTPluginLib" />
             <ComponentRef Id="QTTabBar" />
-           
+            <ComponentRef Id="QTTabBarNative" />
+
 
             <?foreach arch in x86;x64 ?>
                 <!-- RegKeys -->
