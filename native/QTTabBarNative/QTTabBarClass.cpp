@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "QTTabBarClass.h"
+#include "NativeTabControl.h"
+#include "NativeTabNotifications.h"
 
 namespace {
 
@@ -129,10 +131,13 @@ void QTTabBarClass::FinalRelease() {
     DestroyTimers();
     DestroyContextMenu();
     ReleaseRebarSubclass();
-    if(m_hwndHost != nullptr && ::IsWindow(m_hwndHost)) {
-        ::DestroyWindow(m_hwndHost);
-        m_hwndHost = nullptr;
+    if(m_tabControl) {
+        if(m_tabControl->m_hWnd != nullptr && ::IsWindow(m_tabControl->m_hWnd)) {
+            ::DestroyWindow(m_tabControl->m_hWnd);
+        }
+        m_tabControl.reset();
     }
+    m_hwndHost = nullptr;
     if(m_hWnd != nullptr && ::IsWindow(m_hWnd)) {
         ::DestroyWindow(m_hWnd);
         m_hWnd = nullptr;
@@ -235,27 +240,19 @@ void QTTabBarClass::NotifyFocusChange(BOOL hasFocus) {
     }
 }
 
-void QTTabBarClass::HandleContextCommand(UINT commandId) {
+void QTTabBarClass::HandleContextCommand(UINT commandId, UINT tabIndex) {
     ATLTRACE(L"QTTabBarClass::HandleContextCommand %u\n", commandId);
     switch(commandId) {
     case ID_CONTEXT_NEWTAB:
-        if(m_hwndHost != nullptr) {
-            ::SendMessageW(m_hwndHost, WM_COMMAND, commandId, 0);
-        }
-        break;
     case ID_CONTEXT_CLOSETAB:
-        if(m_hwndHost != nullptr) {
-            ::SendMessageW(m_hwndHost, WM_COMMAND, commandId, 0);
+    case ID_CONTEXT_OPTIONS:
+        if(m_hwndRebar != nullptr) {
+            ::SendMessageW(m_hwndRebar, WM_COMMAND, MAKEWPARAM(commandId, tabIndex), reinterpret_cast<LPARAM>(m_hWnd));
         }
         break;
     case ID_CONTEXT_REFRESH:
         if(m_spExplorer) {
             m_spExplorer->Refresh();
-        }
-        break;
-    case ID_CONTEXT_OPTIONS:
-        if(m_hwndHost != nullptr) {
-            ::SendMessageW(m_hwndHost, WM_COMMAND, commandId, 0);
         }
         break;
     default:
@@ -304,7 +301,14 @@ bool QTTabBarClass::BandHasBreak() const {
 LRESULT QTTabBarClass::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled) {
     bHandled = TRUE;
 
-    m_hwndHost = ::CreateWindowExW(0, WC_STATICW, L"", WS_CHILD | WS_VISIBLE | SS_LEFT, 0, 0, m_minSize.cx, m_minSize.cy, m_hWnd, nullptr, _AtlBaseModule.GetModuleInstance(), nullptr);
+    RECT rc{0, 0, m_minSize.cx, m_minSize.cy};
+    m_tabControl = std::make_unique<NativeTabControl>();
+    if(m_tabControl) {
+        HWND hwndTab = m_tabControl->Create(m_hWnd, rc, nullptr,
+                                           WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
+                                           0, ID_TAB_CONTROL);
+        m_hwndHost = hwndTab;
+    }
     InitializeContextMenu();
     InitializeTimers();
     return 0;
@@ -314,9 +318,23 @@ LRESULT QTTabBarClass::OnDestroy(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lPar
     bHandled = TRUE;
     DestroyTimers();
     DestroyContextMenu();
-    if(m_hwndHost != nullptr && ::IsWindow(m_hwndHost)) {
-        ::DestroyWindow(m_hwndHost);
-        m_hwndHost = nullptr;
+    if(m_tabControl) {
+        if(m_tabControl->m_hWnd != nullptr && ::IsWindow(m_tabControl->m_hWnd)) {
+            ::DestroyWindow(m_tabControl->m_hWnd);
+        }
+        m_tabControl.reset();
+    }
+    m_hwndHost = nullptr;
+    return 0;
+}
+
+LRESULT QTTabBarClass::OnSize(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& bHandled) {
+    bHandled = TRUE;
+    if(m_tabControl && m_tabControl->m_hWnd != nullptr) {
+        int width = LOWORD(lParam);
+        int height = HIWORD(lParam);
+        ::SetWindowPos(m_tabControl->m_hWnd, nullptr, 0, 0, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
+        m_tabControl->EnsureLayout();
     }
     return 0;
 }
@@ -361,9 +379,32 @@ LRESULT QTTabBarClass::OnContextMenu(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam
     return 0;
 }
 
-LRESULT QTTabBarClass::OnCommand(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& bHandled) {
+LRESULT QTTabBarClass::OnCommand(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL& bHandled) {
     bHandled = TRUE;
-    HandleContextCommand(LOWORD(wParam));
+    UINT commandId = LOWORD(wParam);
+    UINT tabIndex = HIWORD(wParam);
+    HWND source = reinterpret_cast<HWND>(lParam);
+    if(source == m_hwndHost && source != nullptr) {
+        HandleContextCommand(commandId, tabIndex);
+        return 0;
+    }
+    HandleContextCommand(commandId, tabIndex);
+    return 0;
+}
+
+LRESULT QTTabBarClass::OnNotify(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL& bHandled) {
+    bHandled = FALSE;
+    NMHDR* hdr = reinterpret_cast<NMHDR*>(lParam);
+    if(hdr != nullptr && m_tabControl) {
+        HWND tooltip = m_tabControl->GetTooltipWindow();
+        if(hdr->hwndFrom == m_tabControl->m_hWnd || (tooltip != nullptr && hdr->hwndFrom == tooltip)) {
+            if(m_hwndRebar != nullptr) {
+                ::SendMessageW(m_hwndRebar, WM_NOTIFY, wParam, lParam);
+            }
+            bHandled = TRUE;
+            return 0;
+        }
+    }
     return 0;
 }
 

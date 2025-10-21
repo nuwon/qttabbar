@@ -33,6 +33,21 @@
     <ClInclude Include="Resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="NativeTabControl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="NativeTabNotifications.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="NativeTabUpDown.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TabCollection.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TabItemData.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -45,6 +60,18 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="QTTabBarNative.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NativeTabControl.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NativeTabUpDown.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TabCollection.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TabItemData.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

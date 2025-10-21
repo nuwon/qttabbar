@@ -3,6 +3,8 @@
 #include "QTTabBarNativeGuids.h"
 #include "resource.h"
 
+class NativeTabControl;
+
 class RebarBreakFixer;
 
 class ATL_NO_VTABLE QTTabBarClass final
@@ -39,9 +41,11 @@ public:
     BEGIN_MSG_MAP(QTTabBarClass)
         MESSAGE_HANDLER(WM_CREATE, OnCreate)
         MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
+        MESSAGE_HANDLER(WM_SIZE, OnSize)
         MESSAGE_HANDLER(WM_TIMER, OnTimer)
         MESSAGE_HANDLER(WM_CONTEXTMENU, OnContextMenu)
         MESSAGE_HANDLER(WM_COMMAND, OnCommand)
+        MESSAGE_HANDLER(WM_NOTIFY, OnNotify)
         MESSAGE_HANDLER(WM_SETFOCUS, OnSetFocus)
         MESSAGE_HANDLER(WM_KILLFOCUS, OnKillFocus)
         MESSAGE_HANDLER(WM_APP_UNSUBCLASS, OnUnsetRebarMonitor)
@@ -80,9 +84,11 @@ public:
     // Window message handlers
     LRESULT OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnContextMenu(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnCommand(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnSetFocus(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnKillFocus(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnUnsetRebarMonitor(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
@@ -97,7 +103,7 @@ private:
     void ReleaseRebarSubclass();
     void UpdateVisibility(BOOL fShow);
     void NotifyFocusChange(BOOL hasFocus);
-    void HandleContextCommand(UINT commandId);
+    void HandleContextCommand(UINT commandId, UINT tabIndex = static_cast<UINT>(-1));
     void StartDeferredRebarReset();
 
     bool ShouldHaveBreak() const;
@@ -115,6 +121,7 @@ private:
 
     HWND m_hwndRebar;
     HWND m_hwndHost;
+    std::unique_ptr<NativeTabControl> m_tabControl;
     HMENU m_hContextMenu;
     std::unique_ptr<RebarBreakFixer> m_rebarSubclass;
 

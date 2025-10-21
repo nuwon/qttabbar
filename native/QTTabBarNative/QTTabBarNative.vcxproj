@@ -180,12 +180,19 @@
     <ClInclude Include="targetver.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="NativeTabControl.h" />
+    <ClInclude Include="NativeTabNotifications.h" />
+    <ClInclude Include="NativeTabUpDown.h" />
     <ClInclude Include="QTTabBarClass.h" />
     <ClInclude Include="QTTabBarNativeGuids.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="TabCollection.h" />
+    <ClInclude Include="TabItemData.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="NativeTabControl.cpp" />
+    <ClCompile Include="NativeTabUpDown.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
@@ -194,6 +201,8 @@
     </ClCompile>
     <ClCompile Include="QTTabBarClass.cpp" />
     <ClCompile Include="QTTabBarNative.cpp" />
+    <ClCompile Include="TabCollection.cpp" />
+    <ClCompile Include="TabItemData.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="QTTabBarNative.rc" />
