@@ -25,6 +25,13 @@ IF EXIST Interop.SHDocVw.dll (
     gacutil /if Interop.SHDocVw.dll
 )
 
+pushd ..\..\..\native\QTTabBarNative\x64\%1
+IF EXIST QTTabBarNative.dll (
+    %SystemRoot%\System32\regsvr32.exe /s /u QTTabBarNative.dll
+    %SystemRoot%\System32\regsvr32.exe /s QTTabBarNative.dll
+)
+popd
+
 cd ..\..\..\QTHookLib\bin\%1
 REG ADD HKLM\SOFTWARE\QTTabBar /v InstallPath /t REG_SZ /d "%cd%" /f /reg:32
 REG ADD HKLM\SOFTWARE\QTTabBar /v InstallPath /t REG_SZ /d "%cd%" /f /reg:64
