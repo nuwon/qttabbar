@@ -587,7 +587,15 @@ void WriteConfigToRegistry(const ConfigData& config, bool desktopOnly) {
     }
 }
 
-void UpdateConfigSideEffects(const ConfigData&, bool) {}
+void UpdateConfigSideEffects(const ConfigData&, bool broadcastChanges) {
+    if(!broadcastChanges) {
+        return;
+    }
+    static constexpr wchar_t kNotificationName[] = L"QTTabBar.ConfigChanged";
+    ::SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
+                          reinterpret_cast<LPARAM>(kNotificationName),
+                          SMTO_ABORTIFHUNG, 100, nullptr);
+}
 
 }  // namespace qttabbar
 

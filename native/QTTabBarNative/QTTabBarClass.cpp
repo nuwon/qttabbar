@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "QTTabBarClass.h"
+#include "OptionsDialog.h"
 
 namespace {
 
@@ -254,9 +255,7 @@ void QTTabBarClass::HandleContextCommand(UINT commandId) {
         }
         break;
     case ID_CONTEXT_OPTIONS:
-        if(m_hwndHost != nullptr) {
-            ::SendMessageW(m_hwndHost, WM_COMMAND, commandId, 0);
-        }
+        qttabbar::OptionsDialog::Open(m_hwndRebar != nullptr ? m_hwndRebar : m_hWnd);
         break;
     default:
         break;
