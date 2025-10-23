@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "QTTabBarClass.h"
 #include "OptionsDialog.h"
+#include "TabBarHost.h"
 
 namespace {
 
@@ -105,8 +106,6 @@ std::unordered_map<HWND, RebarBreakFixer*> RebarBreakFixer::s_instances;
 
 QTTabBarClass::QTTabBarClass() noexcept
     : m_hwndRebar(nullptr)
-    , m_hwndHost(nullptr)
-    , m_hContextMenu(nullptr)
     , m_minSize{16, 26}
     , m_maxSize{-1, -1}
     , m_closed(false)
@@ -128,16 +127,19 @@ HRESULT QTTabBarClass::FinalConstruct() {
 
 void QTTabBarClass::FinalRelease() {
     DestroyTimers();
-    DestroyContextMenu();
     ReleaseRebarSubclass();
-    if(m_hwndHost != nullptr && ::IsWindow(m_hwndHost)) {
-        ::DestroyWindow(m_hwndHost);
-        m_hwndHost = nullptr;
+    if(m_tabHost) {
+        m_tabHost->OnParentDestroyed();
+        if(m_tabHost->IsWindow()) {
+            m_tabHost->DestroyWindow();
+        }
+        m_tabHost.reset();
     }
     if(m_hWnd != nullptr && ::IsWindow(m_hWnd)) {
         ::DestroyWindow(m_hWnd);
         m_hWnd = nullptr;
     }
+    PersistBreakPreference();
     m_spExplorer.Release();
     m_spServiceProvider.Release();
     m_spInputObjectSite.Release();
@@ -177,25 +179,6 @@ void QTTabBarClass::DestroyTimers() {
     }
 }
 
-void QTTabBarClass::InitializeContextMenu() {
-    if(m_hContextMenu != nullptr) {
-        return;
-    }
-
-    HINSTANCE module = _AtlBaseModule.GetModuleInstance();
-    HMENU menu = ::LoadMenuW(module, MAKEINTRESOURCEW(IDR_QTTABBAR_CONTEXT_MENU));
-    if(menu != nullptr) {
-        m_hContextMenu = menu;
-    }
-}
-
-void QTTabBarClass::DestroyContextMenu() {
-    if(m_hContextMenu != nullptr) {
-        ::DestroyMenu(m_hContextMenu);
-        m_hContextMenu = nullptr;
-    }
-}
-
 void QTTabBarClass::EnsureRebarSubclass() {
     if(m_hwndRebar == nullptr) {
         return;
@@ -224,6 +207,12 @@ void QTTabBarClass::UpdateVisibility(BOOL fShow) {
             ::SetWindowPos(m_hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         }
     }
+    if(m_tabHost && m_tabHost->IsWindow()) {
+        ::ShowWindow(m_tabHost->m_hWnd, fShow ? SW_SHOW : SW_HIDE);
+    }
+    if(m_tabHost) {
+        m_tabHost->OnBandVisibilityChanged(fShow != FALSE);
+    }
     if(fShow) {
         EnsureRebarSubclass();
         StartDeferredRebarReset();
@@ -236,40 +225,26 @@ void QTTabBarClass::NotifyFocusChange(BOOL hasFocus) {
     }
 }
 
-void QTTabBarClass::HandleContextCommand(UINT commandId) {
-    ATLTRACE(L"QTTabBarClass::HandleContextCommand %u\n", commandId);
-    switch(commandId) {
-    case ID_CONTEXT_NEWTAB:
-        if(m_hwndHost != nullptr) {
-            ::SendMessageW(m_hwndHost, WM_COMMAND, commandId, 0);
-        }
-        break;
-    case ID_CONTEXT_CLOSETAB:
-        if(m_hwndHost != nullptr) {
-            ::SendMessageW(m_hwndHost, WM_COMMAND, commandId, 0);
-        }
-        break;
-    case ID_CONTEXT_REFRESH:
-        if(m_spExplorer) {
-            m_spExplorer->Refresh();
-        }
-        break;
-    case ID_CONTEXT_OPTIONS:
-        qttabbar::OptionsDialog::Open(m_hwndRebar != nullptr ? m_hwndRebar : m_hWnd);
-        break;
-    default:
-        break;
-    }
-}
-
 void QTTabBarClass::StartDeferredRebarReset() {
     if(m_hWnd != nullptr) {
         ::PostMessageW(m_hWnd, WM_APP_UNSUBCLASS, 0, 0);
     }
 }
 
+void QTTabBarClass::PersistBreakPreference() const {
+    CRegKey key;
+    if(key.Create(HKEY_CURRENT_USER, L"Software\\QTTabBar\\") == ERROR_SUCCESS) {
+        key.SetDWORDValue(L"BreakTabBar", BandHasBreak() ? 1u : 0u);
+    }
+}
+
 bool QTTabBarClass::ShouldHaveBreak() const {
-    return true;
+    CRegKey key;
+    DWORD value = 1;
+    if(key.Open(HKEY_CURRENT_USER, L"Software\\QTTabBar\\", KEY_READ) == ERROR_SUCCESS) {
+        key.QueryDWORDValue(L"BreakTabBar", value);
+    }
+    return value != 0;
 }
 
 int QTTabBarClass::ActiveRebarCount() const {
@@ -303,8 +278,21 @@ bool QTTabBarClass::BandHasBreak() const {
 LRESULT QTTabBarClass::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled) {
     bHandled = TRUE;
 
-    m_hwndHost = ::CreateWindowExW(0, WC_STATICW, L"", WS_CHILD | WS_VISIBLE | SS_LEFT, 0, 0, m_minSize.cx, m_minSize.cy, m_hWnd, nullptr, _AtlBaseModule.GetModuleInstance(), nullptr);
-    InitializeContextMenu();
+    if(!m_tabHost) {
+        m_tabHost = std::make_unique<TabBarHost>(*this);
+    }
+    if(m_tabHost) {
+        RECT rc = {0, 0, m_minSize.cx, m_minSize.cy};
+        HWND hwndHost = m_tabHost->Create(m_hWnd, rc, L"",
+                                          WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
+        if(hwndHost == nullptr) {
+            return -1;
+        }
+        m_tabHost->Initialize();
+        if(m_spExplorer) {
+            m_tabHost->SetExplorer(m_spExplorer);
+        }
+    }
     InitializeTimers();
     return 0;
 }
@@ -312,10 +300,12 @@ LRESULT QTTabBarClass::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lPara
 LRESULT QTTabBarClass::OnDestroy(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled) {
     bHandled = TRUE;
     DestroyTimers();
-    DestroyContextMenu();
-    if(m_hwndHost != nullptr && ::IsWindow(m_hwndHost)) {
-        ::DestroyWindow(m_hwndHost);
-        m_hwndHost = nullptr;
+    if(m_tabHost) {
+        m_tabHost->OnParentDestroyed();
+        if(m_tabHost->IsWindow()) {
+            m_tabHost->DestroyWindow();
+        }
+        m_tabHost.reset();
     }
     return 0;
 }
@@ -332,12 +322,7 @@ LRESULT QTTabBarClass::OnTimer(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, 
 
 LRESULT QTTabBarClass::OnContextMenu(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL& bHandled) {
     bHandled = TRUE;
-    if(m_hContextMenu == nullptr) {
-        return 0;
-    }
-
-    HMENU subMenu = ::GetSubMenu(m_hContextMenu, 0);
-    if(subMenu == nullptr) {
+    if(!m_tabHost) {
         return 0;
     }
 
@@ -356,19 +341,25 @@ LRESULT QTTabBarClass::OnContextMenu(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam
         ::GetCursorPos(&pt);
     }
 
-    ::TrackPopupMenuEx(subMenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt.x, pt.y, m_hWnd, nullptr);
+    m_tabHost->ShowContextMenu(pt);
     return 0;
 }
 
 LRESULT QTTabBarClass::OnCommand(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& bHandled) {
     bHandled = TRUE;
-    HandleContextCommand(LOWORD(wParam));
+    if(m_tabHost) {
+        m_tabHost->ExecuteCommand(LOWORD(wParam));
+    }
     return 0;
 }
 
 LRESULT QTTabBarClass::OnSetFocus(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled) {
     bHandled = TRUE;
-    NotifyFocusChange(TRUE);
+    if(m_tabHost && m_tabHost->IsWindow()) {
+        ::SetFocus(m_tabHost->m_hWnd);
+    } else {
+        NotifyFocusChange(TRUE);
+    }
     return 0;
 }
 
@@ -408,6 +399,12 @@ IFACEMETHODIMP QTTabBarClass::ShowDW(BOOL fShow) {
         return hr;
     }
     UpdateVisibility(fShow);
+    if(!fShow) {
+        PersistBreakPreference();
+        if(m_tabHost) {
+            m_tabHost->SaveSessionState();
+        }
+    }
     return S_OK;
 }
 
@@ -416,9 +413,12 @@ IFACEMETHODIMP QTTabBarClass::CloseDW(DWORD /*dwReserved*/) {
     ShowDW(FALSE);
     DestroyTimers();
     ReleaseRebarSubclass();
-    if(m_hwndHost != nullptr && ::IsWindow(m_hwndHost)) {
-        ::DestroyWindow(m_hwndHost);
-        m_hwndHost = nullptr;
+    if(m_tabHost) {
+        m_tabHost->OnParentDestroyed();
+        if(m_tabHost->IsWindow()) {
+            m_tabHost->DestroyWindow();
+        }
+        m_tabHost.reset();
     }
     if(m_hWnd != nullptr && ::IsWindow(m_hWnd)) {
         ::DestroyWindow(m_hWnd);
@@ -482,7 +482,9 @@ IFACEMETHODIMP QTTabBarClass::GetBandInfo(DWORD dwBandID, DWORD dwViewMode, DESK
 IFACEMETHODIMP QTTabBarClass::UIActivateIO(BOOL fActivate, MSG* /*pMsg*/) {
     if(fActivate) {
         EnsureWindow();
-        if(m_hWnd != nullptr) {
+        if(m_tabHost && m_tabHost->IsWindow()) {
+            ::SetFocus(m_tabHost->m_hWnd);
+        } else if(m_hWnd != nullptr) {
             ::SetFocus(m_hWnd);
         }
     }
@@ -497,6 +499,11 @@ IFACEMETHODIMP QTTabBarClass::HasFocusIO() {
     if(focus == m_hWnd || ::IsChild(m_hWnd, focus)) {
         return S_OK;
     }
+    if(m_tabHost && m_tabHost->IsWindow()) {
+        if(focus == m_tabHost->m_hWnd || ::IsChild(m_tabHost->m_hWnd, focus)) {
+            return S_OK;
+        }
+    }
     return S_FALSE;
 }
 
@@ -504,7 +511,14 @@ IFACEMETHODIMP QTTabBarClass::TranslateAcceleratorIO(MSG* pMsg) {
     if(pMsg == nullptr) {
         return E_POINTER;
     }
+    if(m_tabHost && m_tabHost->HandleAccelerator(pMsg)) {
+        return S_OK;
+    }
     if(pMsg->message == WM_KEYDOWN && (pMsg->wParam == VK_TAB || pMsg->wParam == VK_F6)) {
+        if(m_tabHost && m_tabHost->IsWindow()) {
+            ::SetFocus(m_tabHost->m_hWnd);
+            return S_OK;
+        }
         if(m_hWnd != nullptr) {
             ::SetFocus(m_hWnd);
             return S_OK;
@@ -520,6 +534,11 @@ IFACEMETHODIMP QTTabBarClass::SetSite(IUnknown* pUnkSite) {
         m_spExplorer.Release();
         m_spSite.Release();
         m_hwndRebar = nullptr;
+        PersistBreakPreference();
+        if(m_tabHost) {
+            m_tabHost->SaveSessionState();
+            m_tabHost->ClearExplorer();
+        }
         ReleaseRebarSubclass();
         return S_OK;
     }
@@ -534,6 +553,10 @@ IFACEMETHODIMP QTTabBarClass::SetSite(IUnknown* pUnkSite) {
 
     if(m_spServiceProvider) {
         m_spServiceProvider->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&m_spExplorer));
+    }
+
+    if(m_tabHost) {
+        m_tabHost->SetExplorer(m_spExplorer);
     }
 
     CComPtr<IOleWindow> spOleWindow;
