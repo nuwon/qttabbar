@@ -10,7 +10,13 @@
 #include <string>
 #include <vector>
 
-class QTTabBarClass;
+class ITabBarHostOwner {
+public:
+    virtual ~ITabBarHostOwner() = default;
+    virtual HWND GetHostWindow() const noexcept = 0;
+    virtual HWND GetHostRebarWindow() const noexcept = 0;
+    virtual void NotifyTabHostFocusChange(BOOL hasFocus) = 0;
+};
 
 class TabBarHost final
     : public CWindowImpl<TabBarHost, CWindow, CControlWinTraits>
@@ -18,7 +24,7 @@ class TabBarHost final
 public:
     DECLARE_WND_CLASS_EX(L"QTTabBarNative_TabBarHost", CS_DBLCLKS, COLOR_WINDOW);
 
-    explicit TabBarHost(QTTabBarClass& owner) noexcept;
+    explicit TabBarHost(ITabBarHostOwner& owner) noexcept;
     ~TabBarHost() override;
 
     void Initialize();
@@ -111,7 +117,7 @@ private:
     void TrimClosedHistory();
     void LogTabsState(const wchar_t* source) const;
 
-    QTTabBarClass& m_owner;
+    ITabBarHostOwner& m_owner;
     CComPtr<IWebBrowser2> m_spBrowser;
     DWORD m_browserCookie;
     HMENU m_hContextMenu;

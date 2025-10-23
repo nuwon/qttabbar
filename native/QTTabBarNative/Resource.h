@@ -7,6 +7,7 @@
 #define IDR_QTTABBARNATIVE              101
 #define IDR_QTTABBARCLASS               102
 #define IDR_AUTOLOADERNATIVE            103
+#define IDR_QTSECONDVIEWBAR             104
 #define IDR_QTTABBAR_CONTEXT_MENU       200
 
 #define IDD_OPTIONS_DIALOG              300
@@ -53,7 +54,7 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        104
+#define _APS_NEXT_RESOURCE_VALUE        105
 #define _APS_NEXT_COMMAND_VALUE         32773
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           110

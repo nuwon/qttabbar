@@ -17,6 +17,17 @@ library QTTabBarNativeLib
         [default] interface IQTTabBarClass;
     };
 
+    [uuid(724B8F87-69C4-4B78-944F-F13D2AD33B71)]
+    interface IQTSecondViewBar : IUnknown
+    {
+    };
+
+    [uuid(D2BF470E-ED1C-487F-A888-2BD8835EB6CE)]
+    coclass QTSecondViewBar
+    {
+        [default] interface IQTSecondViewBar;
+    };
+
     [uuid(D2BF470E-ED1C-487F-A777-2BD8835EB6CE)]
     coclass AutoLoaderNative
     {

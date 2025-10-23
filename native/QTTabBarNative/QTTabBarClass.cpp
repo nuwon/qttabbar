@@ -606,3 +606,15 @@ IFACEMETHODIMP QTTabBarClass::GetSizeMax(ULARGE_INTEGER* pcbSize) {
     pcbSize->QuadPart = 0;
     return E_NOTIMPL;
 }
+
+HWND QTTabBarClass::GetHostWindow() const noexcept {
+    return m_hWnd;
+}
+
+HWND QTTabBarClass::GetHostRebarWindow() const noexcept {
+    return m_hwndRebar;
+}
+
+void QTTabBarClass::NotifyTabHostFocusChange(BOOL hasFocus) {
+    NotifyFocusChange(hasFocus);
+}

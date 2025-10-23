@@ -17,6 +17,7 @@ class ATL_NO_VTABLE QTTabBarClass final
     , public IPersistStream
     , public IOleWindow
     , public CWindowImpl<QTTabBarClass, CWindow, CControlWinTraits>
+    , public ITabBarHostOwner
 {
 public:
     QTTabBarClass() noexcept;
@@ -78,6 +79,11 @@ public:
     IFACEMETHODIMP Load(IStream* pStm) override;
     IFACEMETHODIMP Save(IStream* pStm, BOOL fClearDirty) override;
     IFACEMETHODIMP GetSizeMax(ULARGE_INTEGER* pcbSize) override;
+
+    // ITabBarHostOwner
+    HWND GetHostWindow() const noexcept override;
+    HWND GetHostRebarWindow() const noexcept override;
+    void NotifyTabHostFocusChange(BOOL hasFocus) override;
 
     // Window message handlers
     LRESULT OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
