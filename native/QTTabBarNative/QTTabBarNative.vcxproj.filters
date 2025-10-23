@@ -48,6 +48,9 @@
     <ClInclude Include="HookLibraryBridge.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="InstanceManagerNative.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="PluginContracts.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -55,6 +58,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="PluginManagerNative.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="QTButtonBar.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="TabBarHost.h">
@@ -92,6 +98,12 @@
     <ClCompile Include="PluginManagerNative.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="InstanceManagerNative.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="QTButtonBar.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="TabBarHost.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -107,6 +119,9 @@
     </Midl>
   </ItemGroup>
   <ItemGroup>
+    <None Include="QTButtonBar.rgs">
+      <Filter>Resource Files</Filter>
+    </None>
     <None Include="QTTabBarNative.def">
       <Filter>Source Files</Filter>
     </None>

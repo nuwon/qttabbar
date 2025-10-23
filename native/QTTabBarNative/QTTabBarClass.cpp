@@ -2,6 +2,7 @@
 #include "QTTabBarClass.h"
 #include "OptionsDialog.h"
 #include "TabBarHost.h"
+#include "InstanceManagerNative.h"
 
 namespace {
 
@@ -126,6 +127,7 @@ HRESULT QTTabBarClass::FinalConstruct() {
 }
 
 void QTTabBarClass::FinalRelease() {
+    qttabbar::InstanceManagerNative::UnregisterTabBar(this);
     DestroyTimers();
     ReleaseRebarSubclass();
     if(m_tabHost) {
@@ -353,6 +355,12 @@ LRESULT QTTabBarClass::OnCommand(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/
     return 0;
 }
 
+void QTTabBarClass::ExecuteHostCommand(UINT commandId) {
+    if(m_tabHost) {
+        m_tabHost->ExecuteCommand(commandId);
+    }
+}
+
 LRESULT QTTabBarClass::OnSetFocus(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled) {
     bHandled = TRUE;
     if(m_tabHost && m_tabHost->IsWindow()) {
@@ -529,6 +537,7 @@ IFACEMETHODIMP QTTabBarClass::TranslateAcceleratorIO(MSG* pMsg) {
 
 IFACEMETHODIMP QTTabBarClass::SetSite(IUnknown* pUnkSite) {
     if(pUnkSite == nullptr) {
+        qttabbar::InstanceManagerNative::UnregisterTabBar(this);
         m_spInputObjectSite.Release();
         m_spServiceProvider.Release();
         m_spExplorer.Release();
@@ -565,6 +574,7 @@ IFACEMETHODIMP QTTabBarClass::SetSite(IUnknown* pUnkSite) {
     }
 
     EnsureRebarSubclass();
+    qttabbar::InstanceManagerNative::RegisterTabBar(this);
     return S_OK;
 }
 

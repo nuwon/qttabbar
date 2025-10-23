@@ -3,6 +3,7 @@
 
 IDR_QTTABBARNATIVE REGISTRY "QTTabBarNative.rgs"
 IDR_QTTABBARCLASS REGISTRY "QTTabBarClass.rgs"
+IDR_QTBUTTONBAR REGISTRY "QTButtonBar.rgs"
 
 IDR_QTTABBAR_CONTEXT_MENU MENU
 BEGIN
@@ -139,6 +140,32 @@ END
 STRINGTABLE
 BEGIN
     IDS_PROJNAME           "QTTabBarNative"
+    IDS_BUTTONBAR_BACK              "Back"
+    IDS_BUTTONBAR_FORWARD           "Forward"
+    IDS_BUTTONBAR_GROUPS            "Groups"
+    IDS_BUTTONBAR_RECENT_TABS       "Recent Tabs"
+    IDS_BUTTONBAR_APPS              "Apps"
+    IDS_BUTTONBAR_NEW_WINDOW        "New Window"
+    IDS_BUTTONBAR_CLONE             "Clone"
+    IDS_BUTTONBAR_LOCK              "Lock"
+    IDS_BUTTONBAR_MISC              "Tools"
+    IDS_BUTTONBAR_TOPMOST           "Topmost"
+    IDS_BUTTONBAR_CLOSE             "Close"
+    IDS_BUTTONBAR_CLOSE_OTHERS      "Close Others"
+    IDS_BUTTONBAR_CLOSE_WINDOW      "Close Window"
+    IDS_BUTTONBAR_CLOSE_LEFT        "Close Left"
+    IDS_BUTTONBAR_CLOSE_RIGHT       "Close Right"
+    IDS_BUTTONBAR_GO_UP             "Up"
+    IDS_BUTTONBAR_REFRESH           "Refresh"
+    IDS_BUTTONBAR_SEARCH            "Search"
+    IDS_BUTTONBAR_OPACITY           "Opacity"
+    IDS_BUTTONBAR_FILTER            "Filter"
+    IDS_BUTTONBAR_OPTIONS           "Options"
+    IDS_BUTTONBAR_GROUPS_PLACEHOLDER "Groups menu pending"
+    IDS_BUTTONBAR_RECENT_PLACEHOLDER "Recent history pending"
+    IDS_BUTTONBAR_NO_PLUGINS        "No plugins enabled"
+    IDS_BUTTONBAR_MISC_PLACEHOLDER  "Tools menu pending"
+    IDS_BUTTONBAR_OPACITY_PLACEHOLDER "Opacity controls pending"
 END
 
 VS_VERSION_INFO VERSIONINFO

@@ -89,6 +89,9 @@ public:
     LRESULT OnKillFocus(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnUnsetRebarMonitor(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
+    void ExecuteHostCommand(UINT commandId);
+    TabBarHost* GetTabHost() const noexcept { return m_tabHost.get(); }
+
 private:
     HRESULT EnsureWindow();
     void DestroyTimers();

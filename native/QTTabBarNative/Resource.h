@@ -6,6 +6,7 @@
 #define IDS_PROJNAME                    100
 #define IDR_QTTABBARNATIVE              101
 #define IDR_QTTABBARCLASS               102
+#define IDR_QTBUTTONBAR                 103
 #define IDR_QTTABBAR_CONTEXT_MENU       200
 
 #define IDD_OPTIONS_DIALOG              300
@@ -37,6 +38,34 @@
 #define IDC_TRAY_ON_MINIMIZE            1107
 #define IDC_AUTO_HOOK_WINDOW            1108
 #define IDC_SHOW_FAIL_NAV_MSG           1109
+#define IDC_BUTTONBAR_SEARCHBOX         1200
+
+#define IDS_BUTTONBAR_BACK              4000
+#define IDS_BUTTONBAR_FORWARD           4001
+#define IDS_BUTTONBAR_GROUPS            4002
+#define IDS_BUTTONBAR_RECENT_TABS       4003
+#define IDS_BUTTONBAR_APPS              4004
+#define IDS_BUTTONBAR_NEW_WINDOW        4005
+#define IDS_BUTTONBAR_CLONE             4006
+#define IDS_BUTTONBAR_LOCK              4007
+#define IDS_BUTTONBAR_MISC              4008
+#define IDS_BUTTONBAR_TOPMOST           4009
+#define IDS_BUTTONBAR_CLOSE             4010
+#define IDS_BUTTONBAR_CLOSE_OTHERS      4011
+#define IDS_BUTTONBAR_CLOSE_WINDOW      4012
+#define IDS_BUTTONBAR_CLOSE_LEFT        4013
+#define IDS_BUTTONBAR_CLOSE_RIGHT       4014
+#define IDS_BUTTONBAR_GO_UP             4015
+#define IDS_BUTTONBAR_REFRESH           4016
+#define IDS_BUTTONBAR_SEARCH            4017
+#define IDS_BUTTONBAR_OPACITY           4018
+#define IDS_BUTTONBAR_FILTER            4019
+#define IDS_BUTTONBAR_OPTIONS           4020
+#define IDS_BUTTONBAR_GROUPS_PLACEHOLDER 4021
+#define IDS_BUTTONBAR_RECENT_PLACEHOLDER 4022
+#define IDS_BUTTONBAR_NO_PLUGINS        4023
+#define IDS_BUTTONBAR_MISC_PLACEHOLDER  4024
+#define IDS_BUTTONBAR_OPACITY_PLACEHOLDER 4025
 
 #define ID_CONTEXT_NEWTAB               32768
 #define ID_CONTEXT_CLOSETAB             32769
@@ -52,7 +81,7 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        103
+#define _APS_NEXT_RESOURCE_VALUE        104
 #define _APS_NEXT_COMMAND_VALUE         32773
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           110

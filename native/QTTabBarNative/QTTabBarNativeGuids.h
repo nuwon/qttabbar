@@ -17,3 +17,13 @@ DEFINE_GUID(IID_IQTTabBarClass, 0xe4f0e46a, 0x1eac, 0x4f67, 0x8c, 0x47, 0x58, 0x
 struct __declspec(uuid("E4F0E46A-1EAC-4F67-8C47-58C672A6433B")) IQTTabBarClass : public IUnknown
 {
 };
+
+// {D2BF470E-ED1C-487F-A666-2BD8835EB6CE}
+DEFINE_GUID(CLSID_QTButtonBar, 0xd2bf470e, 0xed1c, 0x487f, 0xa6, 0x66, 0x2b, 0xd8, 0x83, 0x5e, 0xb6, 0xce);
+
+// {1F81B173-1B0B-4A33-8DC1-3C6B63B26F52}
+DEFINE_GUID(IID_IQTButtonBar, 0x1f81b173, 0x1b0b, 0x4a33, 0x8d, 0xc1, 0x3c, 0x6b, 0x63, 0xb2, 0x6f, 0x52);
+
+struct __declspec(uuid("1F81B173-1B0B-4A33-8DC1-3C6B63B26F52")) IQTButtonBar : public IUnknown
+{
+};
