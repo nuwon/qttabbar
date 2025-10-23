@@ -31,6 +31,124 @@ namespace QTTabBarLib {
         private static IEncodingDetector plgEncodingDetector;
         private static Dictionary<string, PluginAssembly> dicPluginAssemblies = new Dictionary<string, PluginAssembly>();
         private static Dictionary<string, Plugin> dicStaticPluginInstances = new Dictionary<string, Plugin>();      
+        private static readonly Dictionary<string, NativePluginMetadata> dicNativePluginMetadata = new Dictionary<string, NativePluginMetadata>(StringComparer.OrdinalIgnoreCase);
+        private static List<NativePluginMetadata> cachedNativeMetadata = new List<NativePluginMetadata>();
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct NativePluginMetadata
+        {
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string Id;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string Name;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string Author;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 512)]
+            public string Description;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string Version;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            public string Path;
+
+            public PluginType PluginType;
+
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool HasOptions;
+
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool Enabled;
+
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool ManagedFallback;
+        }
+
+        private static class NativePluginInterop
+        {
+            [DllImport("QTTabBarNative.dll", CallingConvention = CallingConvention.StdCall)]
+            private static extern void QTTabBarNative_RefreshPlugins();
+
+            [DllImport("QTTabBarNative.dll", CallingConvention = CallingConvention.StdCall)]
+            private static extern UIntPtr QTTabBarNative_GetPluginCount();
+
+            [DllImport("QTTabBarNative.dll", CallingConvention = CallingConvention.StdCall)]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            private static extern bool QTTabBarNative_GetPluginMetadata(UIntPtr index, out NativePluginMetadata metadata);
+
+            [DllImport("QTTabBarNative.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode)]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            private static extern bool QTTabBarNative_SetPluginEnabled(string pluginId, [MarshalAs(UnmanagedType.Bool)] bool enabled);
+
+            public static List<NativePluginMetadata> Refresh()
+            {
+                var results = new List<NativePluginMetadata>();
+                try
+                {
+                    QTTabBarNative_RefreshPlugins();
+                    int count = (int)QTTabBarNative_GetPluginCount();
+                    for(int i = 0; i < count; ++i)
+                    {
+                        NativePluginMetadata metadata;
+                        if(QTTabBarNative_GetPluginMetadata((UIntPtr)i, out metadata))
+                        {
+                            results.Add(metadata);
+                        }
+                    }
+                }
+                catch (DllNotFoundException)
+                {
+                    // Native bridge not yet deployed; fall back to managed path.
+                }
+                catch (EntryPointNotFoundException)
+                {
+                    // Older native binary; ignore and fall back.
+                }
+
+                return results;
+            }
+
+            public static void SetPluginEnabled(string pluginId, bool enabled)
+            {
+                try
+                {
+                    QTTabBarNative_SetPluginEnabled(pluginId, enabled);
+                }
+                catch (DllNotFoundException)
+                {
+                }
+                catch (EntryPointNotFoundException)
+                {
+                }
+            }
+        }
+
+        private static void RefreshNativeMetadataCache()
+        {
+            cachedNativeMetadata = NativePluginInterop.Refresh();
+            dicNativePluginMetadata.Clear();
+            foreach(var metadata in cachedNativeMetadata)
+            {
+                if(!string.IsNullOrEmpty(metadata.Id))
+                {
+                    dicNativePluginMetadata[metadata.Id] = metadata;
+                }
+            }
+
+            if(ConfigManager.LoadedConfig != null && cachedNativeMetadata.Count > 0)
+            {
+                ConfigManager.LoadedConfig.plugin.Enabled = cachedNativeMetadata
+                    .Where(m => m.Enabled)
+                    .Select(m => m.Id)
+                    .ToArray();
+            }
+        }
+
+
+
 
         public static void ClearIEncodingDetector() {
             plgEncodingDetector = null;
@@ -40,7 +158,9 @@ namespace QTTabBarLib {
             return dicPluginAssemblies.TryGetValue(path, out asm);
         }
 
-        // ´¦Àí²å¼şµÄÒì³£
+            RefreshNativeMetadataCache();
+            ApplyNativeEnablement(Config.Plugin.Enabled);
+        // å¤„ç†æ’ä»¶çš„å¼‚å¸¸
         public static void HandlePluginException(Exception ex, IntPtr hwnd, string pluginID, string strCase) {
             MessageForm.Show(hwnd, 
                 "Error : " + strCase + "\r\nPlugin : \"" + pluginID + "\"\r\nErrorType : " + ex, 
@@ -61,7 +181,7 @@ namespace QTTabBarLib {
         }
 
         /// <summary>
-        /// ¼ÓÔØÒ»¸öÄ¬ÈÏµÄ ²å¼ş£¬ Èç¹û´æÔÚµÄ»°£¡ TODO
+        /// åŠ è½½ä¸€ä¸ªé»˜è®¤çš„ æ’ä»¶ï¼Œ å¦‚æœå­˜åœ¨çš„è¯ï¼ TODO
         /// </summary>
         private static void InitDefaultQTConfigPlugin()
         {
@@ -159,11 +279,19 @@ namespace QTTabBarLib {
         }
 
         private static IEnumerable<string> ReadAssemblyPaths() {
-            using(RegistryKey key = Registry.CurrentUser.CreateSubKey(RegConst.Root + @"Plugins\Paths")) {
+            if(cachedNativeMetadata.Count > 0) {
+                foreach(var metadata in cachedNativeMetadata) {
+                    if(!string.IsNullOrEmpty(metadata.Path) && File.Exists(metadata.Path)) {
+                        yield return metadata.Path;
+                    }
+                }
+                yield break;
+            }
+
+            using(RegistryKey key = Registry.CurrentUser.CreateSubKey(RegConst.Root + @"Plugins\\Paths")) {
                 if(key == null) yield break;
                 foreach(string str in key.GetValueNames())
                 {
-                    // ĞèÒªÅĞ¶ÏÎÄ¼şÊÇ·ñ´æÔÚ
                     var path = (string)key.GetValue(str, string.Empty);
                     if (File.Exists(path))
                     {
@@ -171,23 +299,26 @@ namespace QTTabBarLib {
                     }
                 }
             }
+
         }
 
         public static void RefreshPlugins() {
+            RefreshNativeMetadataCache();
+            ApplyNativeEnablement(Config.Plugin.Enabled);
             // Read in the Assemblies to refresh
             string[] enabled = Config.Plugin.Enabled;
 /*
-Î´½«¶ÔÏóÒıÓÃÉèÖÃµ½¶ÔÏóµÄÊµÀı¡£
+æœªå°†å¯¹è±¡å¼•ç”¨è®¾ç½®åˆ°å¯¹è±¡çš„å®ä¾‹ã€‚
 HelpLink ---
 
 Source ---
 QTTabBar
 StackTrace ---
-   ÔÚ QTTabBarLib.PluginManager.<RefreshPlugins>b__e(PluginAssembly asm)
-   ÔÚ System.Linq.Enumerable.<SelectManyIterator>d__14`2.MoveNext()
-   ÔÚ System.Linq.Enumerable.WhereSelectEnumerableIterator`2.MoveNext()
-   ÔÚ System.Collections.Generic.List`1..ctor(IEnumerable`1 collection)
-   ÔÚ System.Linq.Enumerable.ToList[TSource](IEnumerable`1 source)
+   åœ¨ QTTabBarLib.PluginManager.<RefreshPlugins>b__e(PluginAssembly asm)
+   åœ¨ System.Linq.Enumerable.<SelectManyIterator>d__14`2.MoveNext()
+   åœ¨ System.Linq.Enumerable.WhereSelectEnumerableIterator`2.MoveNext()
+   åœ¨ System.Collections.Generic.List`1..ctor(IEnumerable`1 collection)
+   åœ¨ System.Linq.Enumerable.ToList[TSource](IEnumerable`1 source)
  */
             var pluginAssemblies = ReadAssemblyPaths().Select(path => {
                 PluginAssembly asm;
@@ -229,6 +360,29 @@ StackTrace ---
                     }
                 }
                 InstanceManager.LocalTabBroadcast(tabbar => tabbar.pluginServer.RefreshPlugins());
+            }
+        }
+
+        internal static void ApplyNativeEnablement(IEnumerable<string> enabledPluginIds) {
+            if(enabledPluginIds == null) {
+                return;
+            }
+
+            HashSet<string> enabledSet = new HashSet<string>(enabledPluginIds, StringComparer.OrdinalIgnoreCase);
+            foreach(var key in dicNativePluginMetadata.Keys.ToList()) {
+                bool shouldEnable = enabledSet.Contains(key);
+                NativePluginInterop.SetPluginEnabled(key, shouldEnable);
+                var metadata = dicNativePluginMetadata[key];
+                metadata.Enabled = shouldEnable;
+                dicNativePluginMetadata[key] = metadata;
+            }
+
+            if(cachedNativeMetadata.Count > 0) {
+                for(int i = 0; i < cachedNativeMetadata.Count; ++i) {
+                    var metadata = cachedNativeMetadata[i];
+                    metadata.Enabled = enabledSet.Contains(metadata.Id);
+                    cachedNativeMetadata[i] = metadata;
+                }
             }
         }
 
