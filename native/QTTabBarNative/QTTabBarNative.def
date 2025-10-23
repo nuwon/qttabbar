@@ -5,3 +5,11 @@ EXPORTS
     DllRegisterServer    PRIVATE
     DllUnregisterServer  PRIVATE
     DllInstall           PRIVATE
+    QTTabBarNative_RefreshPlugins
+    QTTabBarNative_GetPluginCount
+    QTTabBarNative_GetPluginMetadata
+    QTTabBarNative_SetPluginEnabled
+    QTTabBarNative_IsPluginEnabled
+    QTTabBarNative_InitializeHookLibrary
+    QTTabBarNative_ShutdownHookLibrary
+    QTTabBarNative_InitShellBrowserHook

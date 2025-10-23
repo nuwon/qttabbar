@@ -92,6 +92,7 @@ namespace QTTabBarLib {
                     if(entry.Enabled) enabled.Add(entry.PluginID);
                 }
                 WorkingConfig.plugin.Enabled = enabled.ToArray();
+                PluginManager.ApplyNativeEnablement(WorkingConfig.plugin.Enabled);
                 foreach(PluginAssembly asm in toDispose) {
                     asm.Dispose();
                 }

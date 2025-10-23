@@ -26,31 +26,50 @@ using QTTabBarLib.Interop;
 namespace QTTabBarLib {
     public static class HookLibManager {
         private static bool fShellBrowserIsHooked;
-        private static IntPtr hHookLib;
+        private static bool fHookLibraryLoaded;
         private static int[] hookStatus = Enumerable.Repeat(-1, Enum.GetNames(typeof(Hooks)).Length).ToArray();
-        
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate void HookLibCallback(int hookId, int retcode);
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate bool NewWindowCallback(IntPtr pIDL);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        private delegate void HookLibCallback(int hookId, int retcode, IntPtr context);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        private delegate bool NewWindowCallback(IntPtr pIDL, IntPtr context);
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct CallbackStruct {
-            public HookLibCallback cbHookResult;
-            public NewWindowCallback cbNewWindow;
-            // todo: NewTreeView should probably also go here.
-            // Using PostThreadMessage has a small chance of causing a memory leak.
+        private struct HookCallbacks
+        {
+            public HookLibCallback HookResult;
+            public NewWindowCallback NewWindow;
+            public IntPtr Context;
         }
 
-        private static readonly CallbackStruct callbackStruct = new CallbackStruct() {
-            cbHookResult = HookResult,
-            cbNewWindow = NewWindow
-        };
+        private static HookCallbacks nativeCallbacks = new HookCallbacks();
+        private static HookLibCallback hookResultDelegate = HookResult;
+        private static NewWindowCallback newWindowDelegate = NewWindow;
 
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate int InitShellBrowserHookDelegate(IntPtr shellBrowser);
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate int InitHookLibDelegate(CallbackStruct fpHookResult);
+        [DllImport("QTTabBarNative.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode)]
+        private static extern int QTTabBarNative_InitializeHookLibrary(ref HookCallbacks callbacks, string libraryPath);
+
+        [DllImport("QTTabBarNative.dll", CallingConvention = CallingConvention.StdCall)]
+        private static extern void QTTabBarNative_ShutdownHookLibrary();
+
+        [DllImport("QTTabBarNative.dll", CallingConvention = CallingConvention.StdCall)]
+        private static extern int QTTabBarNative_InitShellBrowserHook(IntPtr shellBrowser);
+
+        private static void EnsureCallbacks()
+        {
+            if(nativeCallbacks.HookResult == null)
+            {
+                nativeCallbacks.HookResult = hookResultDelegate;
+            }
+
+            if(nativeCallbacks.NewWindow == null)
+            {
+                nativeCallbacks.NewWindow = newWindowDelegate;
+            }
+
+            nativeCallbacks.Context = IntPtr.Zero;
+        }
 
         public enum HookCheckPoint{
             Initial,
@@ -89,42 +108,36 @@ namespace QTTabBarLib {
 
         public static void Initialize_bgtool()
         {
-            if (hHookLib != IntPtr.Zero) return;
+            if (fHookLibraryLoaded) return;
+
             string installPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "QTTabBar");
-            // string filename = IntPtr.Size == 8 ? "QTHookLib64.dll" : "QTHookLib32.dll";
-            string filename =  "ExplorerBgTool.dll";
-            hHookLib = PInvoke.LoadLibrary(Path.Combine(installPath, filename));
-            int retcode = -1;
-            if (hHookLib == IntPtr.Zero)
-            {
-                int error = Marshal.GetLastWin32Error();
-                QTUtility2.MakeErrorLog(null, "LoadLibrary error: " + error);
-            }
-            else
-            {
-                IntPtr pFunc = PInvoke.GetProcAddress(hHookLib, "OnWindowLoad");
-                if (pFunc != IntPtr.Zero)
-                {
-                    InitHookLibDelegate initialize = (InitHookLibDelegate)
-                        Marshal.GetDelegateForFunctionPointer(pFunc, typeof(InitHookLibDelegate));
-                    try
-                    {
-                        retcode = initialize(callbackStruct);
-                    }
-                    catch (Exception e)
-                    {
-                        QTUtility2.MakeErrorLog(e, "");
-                    }
+            string filename = "ExplorerBgTool.dll";
+            string fullPath = Path.Combine(installPath, filename);
 
-                }
+            EnsureCallbacks();
+
+            int hr = -1;
+            try
+            {
+                hr = QTTabBarNative_InitializeHookLibrary(ref nativeCallbacks, fullPath);
+            }
+            catch (DllNotFoundException ex)
+            {
+                QTUtility2.MakeErrorLog(ex, "QTTabBarNative.dll missing for Explorer background tool.");
+            }
+            catch (EntryPointNotFoundException ex)
+            {
+                QTUtility2.MakeErrorLog(ex, "Explorer background tool hook exports missing.");
             }
 
-            if (retcode == 0)
+            if (hr == 0)
             {
+                fHookLibraryLoaded = true;
                 QTUtility2.log("HookLib Initialize success");
                 return;
             }
-            QTUtility2.MakeErrorLog(null, "HookLib Initialize failed: " + retcode);
+
+            QTUtility2.MakeErrorLog(null, "HookLib Initialize failed: " + hr);
 
             MessageForm.Show(IntPtr.Zero,
                 String.Format(
@@ -182,13 +195,13 @@ namespace QTTabBarLib {
 
             string installPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "QTTabBar");
             string filename = IntPtr.Size == 8 ? "QTHookLib64.dll" : "QTHookLib32.dll";
-            if (hHookLib != IntPtr.Zero)
+            if (fHookLibraryLoaded)
             {
-                   if (!Config.Window.AutoHookWindow)
-                   {
-                        PInvoke.FreeLibrary(hHookLib);
-                        hHookLib = IntPtr.Zero;
-                   }
+                if (!Config.Window.AutoHookWindow)
+                {
+                    QTTabBarNative_ShutdownHookLibrary();
+                    fHookLibraryLoaded = false;
+                }
                 return;
             }
 
@@ -206,36 +219,30 @@ namespace QTTabBarLib {
                 return;
             }
             QTUtility2.flog("load library " + Path.Combine(installPath, filename) );
-            hHookLib = PInvoke.LoadLibrary(Path.Combine(installPath, filename));
-            QTUtility2.flog("load library hHookLib " + hHookLib);
-            int retcode = -1;
-            if(hHookLib == IntPtr.Zero) {
-                int error = Marshal.GetLastWin32Error();
-                QTUtility2.MakeErrorLog(null, "LoadLibrary error: " + error);
+            EnsureCallbacks();
+            int hr = -1;
+            try
+            {
+                hr = QTTabBarNative_InitializeHookLibrary(ref nativeCallbacks, Path.Combine(installPath, filename));
             }
-            else {
-                IntPtr pFunc = PInvoke.GetProcAddress(hHookLib, "Initialize");
-                if(pFunc != IntPtr.Zero) {
-                    InitHookLibDelegate initialize = (InitHookLibDelegate) 
-                        Marshal.GetDelegateForFunctionPointer(pFunc, typeof(InitHookLibDelegate));
-                    try {
-                        retcode = initialize(callbackStruct);
-                    }
-                    catch(Exception e) {
-                        QTUtility2.MakeErrorLog(e, "");
-                        LoadedHook = false;
-                    }
-                }
+            catch (DllNotFoundException ex)
+            {
+                QTUtility2.MakeErrorLog(ex, "QTTabBarNative.dll missing for hook initialization.");
+            }
+            catch (EntryPointNotFoundException ex)
+            {
+                QTUtility2.MakeErrorLog(ex, "Hook exports missing in QTTabBarNative.dll.");
             }
 
-            if (retcode == 0)
+            if (hr == 0)
             {
+                fHookLibraryLoaded = true;
                 LoadedHook = true;
                 QTUtility2.log("HookLib Initialize success");
                 // MessageBox.Show("HookLib Initialize success");
                 return;
             }
-            QTUtility2.MakeErrorLog(null, "HookLib Initialize failed: " + retcode);
+            QTUtility2.MakeErrorLog(null, "HookLib Initialize failed: " + hr);
             LoadedHook = false;
             MessageForm.Show(IntPtr.Zero,
                 String.Format(
@@ -251,8 +258,8 @@ namespace QTTabBarLib {
         }
 
 
-        private static void HookResult(int hookId, int retcode) {
-            lock(callbackStruct.cbHookResult) {
+        private static void HookResult(int hookId, int retcode, IntPtr context) {
+            lock(hookStatus) {
                 if (hookId <= hookStatus.Length - 1)
                 {
                     hookStatus[hookId] = retcode;
@@ -262,7 +269,7 @@ namespace QTTabBarLib {
 
         // We need to use a callback rather than a message for window capturing,
         // since the main instance could be in another process.
-        private static bool NewWindow(IntPtr pIDL) {
+        private static bool NewWindow(IntPtr pIDL, IntPtr context) {
             byte[] IDL;
             using(IDLWrapper wrapper = new IDLWrapper(PInvoke.ILClone(pIDL))) {
                 if(!Config.Window.CaptureNewWindows
@@ -290,16 +297,12 @@ namespace QTTabBarLib {
         {
             lock (typeof(HookLibManager))
             {
-                if(fShellBrowserIsHooked || hHookLib == IntPtr.Zero) return;
-                IntPtr pFunc = PInvoke.GetProcAddress(hHookLib, "InitShellBrowserHook");
-                if(pFunc == IntPtr.Zero) return;
-                InitShellBrowserHookDelegate initShellBrowserHook = (InitShellBrowserHookDelegate)
-                        Marshal.GetDelegateForFunctionPointer(pFunc, typeof(InitShellBrowserHookDelegate));
+                if(fShellBrowserIsHooked || !fHookLibraryLoaded) return;
                 IntPtr pShellBrowser = Marshal.GetComInterfaceForObject(shellBrowser, typeof(IShellBrowser));
                 if(pShellBrowser == IntPtr.Zero) return;
                 int retcode = -1;
                 try {
-                    retcode = initShellBrowserHook(pShellBrowser);
+                    retcode = QTTabBarNative_InitShellBrowserHook(pShellBrowser);
                 }
                 catch(Exception e) {
                     QTUtility2.MakeErrorLog(e, "");
