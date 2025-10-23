@@ -16,4 +16,10 @@ library QTTabBarNativeLib
     {
         [default] interface IQTTabBarClass;
     };
+
+    [uuid(D2BF470E-ED1C-487F-A777-2BD8835EB6CE)]
+    coclass AutoLoaderNative
+    {
+        [default] interface IObjectWithSite;
+    };
 };

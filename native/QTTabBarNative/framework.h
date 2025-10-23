@@ -21,3 +21,4 @@
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "shlwapi.lib")
+#pragma comment(lib, "oleaut32.lib")

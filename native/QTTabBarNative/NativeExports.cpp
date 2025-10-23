@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "AutoLoaderNative.h"
 #include "PluginManagerNative.h"
 #include "PluginContracts.h"
 
@@ -61,6 +62,28 @@ __declspec(dllexport) int __stdcall QTTabBarNative_InitShellBrowserHook(IUnknown
         return E_POINTER;
     }
     return qttabbar::hooks::HookLibraryBridge::Instance().InitShellBrowserHook(shellBrowser);
+}
+
+__declspec(dllexport) HRESULT __stdcall QTTabBarNative_ActivateAutoLoader(IUnknown* site) {
+    if (site == nullptr) {
+        return E_POINTER;
+    }
+
+    CComPtr<IWebBrowser2> browser;
+    HRESULT hr = site->QueryInterface(IID_PPV_ARGS(&browser));
+    if (FAILED(hr) || browser == nullptr) {
+        CComPtr<IServiceProvider> serviceProvider;
+        hr = site->QueryInterface(IID_PPV_ARGS(&serviceProvider));
+        if (SUCCEEDED(hr) && serviceProvider) {
+            hr = serviceProvider->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&browser));
+        }
+    }
+
+    if (FAILED(hr) || browser == nullptr) {
+        return FAILED(hr) ? hr : E_NOINTERFACE;
+    }
+
+    return AutoLoaderNative::ActivateForBrowser(browser);
 }
 
 }  // extern "C"

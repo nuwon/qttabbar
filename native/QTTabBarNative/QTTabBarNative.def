@@ -13,3 +13,4 @@ EXPORTS
     QTTabBarNative_InitializeHookLibrary
     QTTabBarNative_ShutdownHookLibrary
     QTTabBarNative_InitShellBrowserHook
+    QTTabBarNative_ActivateAutoLoader

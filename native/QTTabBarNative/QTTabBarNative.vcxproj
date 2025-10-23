@@ -188,6 +188,7 @@
     <ClInclude Include="targetver.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="AutoLoaderNative.h" />
     <ClInclude Include="QTTabBarClass.h" />
     <ClInclude Include="QTTabBarNativeGuids.h" />
     <ClInclude Include="Resource.h" />
@@ -207,6 +208,7 @@
     <ClCompile Include="OptionsDialog.cpp" />
     <ClCompile Include="PluginLibrary.cpp" />
     <ClCompile Include="PluginManagerNative.cpp" />
+    <ClCompile Include="AutoLoaderNative.cpp" />
     <ClCompile Include="QTTabBarClass.cpp" />
     <ClCompile Include="TabBarHost.cpp" />
     <ClCompile Include="QTTabBarNative.cpp" />
