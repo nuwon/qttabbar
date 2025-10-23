@@ -187,6 +187,7 @@
     <ClInclude Include="PluginLibrary.h" />
     <ClInclude Include="PluginManagerNative.h" />
     <ClInclude Include="QTButtonBar.h" />
+    <ClInclude Include="QTDesktopTool.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
@@ -214,6 +215,7 @@
     <ClCompile Include="PluginManagerNative.cpp" />
     <ClCompile Include="AutoLoaderNative.cpp" />
     <ClCompile Include="QTButtonBar.cpp" />
+    <ClCompile Include="QTDesktopTool.cpp" />
     <ClCompile Include="QTTabBarClass.cpp" />
     <ClCompile Include="QTSecondViewBar.cpp" />
     <ClCompile Include="TabBarHost.cpp" />
@@ -228,6 +230,7 @@
   <ItemGroup>
     <None Include="AutoLoaderNative.rgs" />
     <None Include="QTButtonBar.rgs" />
+    <None Include="QTDesktopTool.rgs" />
     <None Include="QTTabBarClass.rgs" />
     <None Include="QTTabBarNative.def" />
   </ItemGroup>

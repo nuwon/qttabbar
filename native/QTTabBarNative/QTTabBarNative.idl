@@ -31,10 +31,23 @@ library QTTabBarNativeLib
     coclass QTSecondViewBar
     {
         [default] interface IQTSecondViewBar;
+    };
+
     [uuid(D2BF470E-ED1C-487F-A666-2BD8835EB6CE)]
     coclass QTButtonBar
     {
         [default] interface IQTButtonBar;
+    };
+
+    [uuid(FA1C427D-ACAB-4CFB-AC87-0180258FF0C4)]
+    interface IQTDesktopTool : IUnknown
+    {
+    };
+
+    [uuid(D2BF470E-ED1C-487F-A555-2BD8835EB6CE)]
+    coclass QTDesktopTool
+    {
+        [default] interface IQTDesktopTool;
     };
 
     [uuid(D2BF470E-ED1C-487F-A777-2BD8835EB6CE)]

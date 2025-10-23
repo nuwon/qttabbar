@@ -31,9 +31,22 @@ struct __declspec(uuid("E4F0E46A-1EAC-4F67-8C47-58C672A6433B")) IQTTabBarClass :
 DEFINE_GUID(IID_IQTSecondViewBar, 0x724b8f87, 0x69c4, 0x4b78, 0x94, 0x4f, 0xf1, 0x3d, 0x2a, 0xd3, 0x3b, 0x71);
 
 struct __declspec(uuid("724B8F87-69C4-4B78-944F-F13D2AD33B71")) IQTSecondViewBar : public IUnknown
+{
+};
+
 // {E4F0E46A-1EAC-4F67-8C47-58C672A6433C}
 DEFINE_GUID(IID_IQTButtonBar, 0xe4f0e46a, 0x1eac, 0x4f67, 0x8c, 0x47, 0x58, 0xc6, 0x72, 0xa6, 0x43, 0x3c);
 
 struct __declspec(uuid("E4F0E46A-1EAC-4F67-8C47-58C672A6433C")) IQTButtonBar : public IUnknown
+{
+};
+
+// {D2BF470E-ED1C-487F-A555-2BD8835EB6CE}
+DEFINE_GUID(CLSID_QTDesktopTool, 0xd2bf470e, 0xed1c, 0x487f, 0xa5, 0x55, 0x2b, 0xd8, 0x83, 0x5e, 0xb6, 0xce);
+
+// {FA1C427D-ACAB-4CFB-AC87-0180258FF0C4}
+DEFINE_GUID(IID_IQTDesktopTool, 0xfa1c427d, 0xacab, 0x4cfb, 0xac, 0x87, 0x1, 0x80, 0x25, 0x8f, 0xf0, 0xc4);
+
+struct __declspec(uuid("FA1C427D-ACAB-4CFB-AC87-0180258FF0C4")) IQTDesktopTool : public IUnknown
 {
 };
