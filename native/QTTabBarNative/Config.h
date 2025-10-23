@@ -201,7 +201,7 @@ struct ConfigData {
 
 ConfigData LoadConfigFromRegistry();
 void WriteConfigToRegistry(const ConfigData& config, bool desktopOnly = false);
-void UpdateConfigSideEffects(const ConfigData& config, bool broadcastChanges);
+void UpdateConfigSideEffects(ConfigData& config, bool broadcastChanges);
 
 }  // namespace qttabbar
 
