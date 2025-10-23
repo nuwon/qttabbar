@@ -82,7 +82,7 @@ _ATL_FUNC_INFO TabBarHost::kNavigateErrorInfo = {CC_STDCALL, VT_EMPTY, 4,
                                                   VT_BYREF | VT_VARIANT}};
 _ATL_FUNC_INFO TabBarHost::kOnQuitInfo = {CC_STDCALL, VT_EMPTY, 0, {}};
 
-TabBarHost::TabBarHost(QTTabBarClass& owner) noexcept
+TabBarHost::TabBarHost(ITabBarHostOwner& owner) noexcept
     : m_owner(owner)
     , m_browserCookie(0)
     , m_hContextMenu(nullptr)
@@ -321,7 +321,7 @@ LRESULT TabBarHost::OnSetFocus(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam
     bHandled = TRUE;
     m_hasFocus = true;
     ATLTRACE(L"TabBarHost::OnSetFocus\n");
-    m_owner.NotifyFocusChange(TRUE);
+    m_owner.NotifyTabHostFocusChange(TRUE);
     return 0;
 }
 
@@ -329,7 +329,7 @@ LRESULT TabBarHost::OnKillFocus(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lPara
     bHandled = TRUE;
     m_hasFocus = false;
     ATLTRACE(L"TabBarHost::OnKillFocus\n");
-    m_owner.NotifyFocusChange(FALSE);
+    m_owner.NotifyTabHostFocusChange(FALSE);
     return 0;
 }
 
@@ -581,7 +581,10 @@ void TabBarHost::RefreshExplorer() {
 
 void TabBarHost::OpenOptions() {
     ATLTRACE(L"TabBarHost::OpenOptions\n");
-    HWND ownerHwnd = m_owner.m_hwndRebar != nullptr ? m_owner.m_hwndRebar : m_owner.m_hWnd;
+    HWND ownerHwnd = m_owner.GetHostRebarWindow();
+    if(ownerHwnd == nullptr) {
+        ownerHwnd = m_owner.GetHostWindow();
+    }
     qttabbar::OptionsDialog::Open(ownerHwnd);
 }
 

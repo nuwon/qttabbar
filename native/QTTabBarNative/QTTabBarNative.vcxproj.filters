@@ -27,6 +27,9 @@
     <ClInclude Include="QTTabBarClass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QTSecondViewBar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="QTTabBarNativeGuids.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -106,6 +109,9 @@
     </ClCompile>
     <ClCompile Include="TabBarHost.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="QTSecondViewBar.cpp">
+       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="InstanceManagerNative.cpp">
       <Filter>Source Files</Filter>

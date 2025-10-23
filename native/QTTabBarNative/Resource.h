@@ -7,7 +7,7 @@
 #define IDR_QTTABBARNATIVE              101
 #define IDR_QTTABBARCLASS               102
 #define IDR_AUTOLOADERNATIVE            103
-#define IDR_QTBUTTONBAR                 104
+#define IDR_QTSECONDVIEWBAR             104
 #define IDR_QTTABBAR_CONTEXT_MENU       200
 
 #define IDD_OPTIONS_DIALOG              300

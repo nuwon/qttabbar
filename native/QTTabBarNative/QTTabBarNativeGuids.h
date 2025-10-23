@@ -27,6 +27,10 @@ struct __declspec(uuid("E4F0E46A-1EAC-4F67-8C47-58C672A6433B")) IQTTabBarClass :
 {
 };
 
+// {724B8F87-69C4-4B78-944F-F13D2AD33B71}
+DEFINE_GUID(IID_IQTSecondViewBar, 0x724b8f87, 0x69c4, 0x4b78, 0x94, 0x4f, 0xf1, 0x3d, 0x2a, 0xd3, 0x3b, 0x71);
+
+struct __declspec(uuid("724B8F87-69C4-4B78-944F-F13D2AD33B71")) IQTSecondViewBar : public IUnknown
 // {E4F0E46A-1EAC-4F67-8C47-58C672A6433C}
 DEFINE_GUID(IID_IQTButtonBar, 0xe4f0e46a, 0x1eac, 0x4f67, 0x8c, 0x47, 0x58, 0xc6, 0x72, 0xa6, 0x43, 0x3c);
 
