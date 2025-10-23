@@ -2,6 +2,10 @@
 #include "OptionsDialog.h"
 
 #include <CommCtrl.h>
+#include <Shobjidl.h>
+
+#include <atlstr.h>
+#include <windowsx.h>
 
 #include <atomic>
 #include <memory>
@@ -22,6 +26,54 @@ constexpr UINT kOptionsDialogDestroy = WM_APP + 43;
 constexpr UINT kOptionsDialogBringToFront = WM_APP + 44;
 
 class OptionsDialogImpl;
+
+extern ByteVector PidlFromDisplayName(const wchar_t* name);
+
+std::wstring LoadStringResource(UINT stringId) {
+    ATL::CStringW value;
+    if(value.LoadString(stringId)) {
+        return std::wstring(value.GetString());
+    }
+    return {};
+}
+
+std::vector<std::wstring> LoadDelimitedStrings(UINT stringId) {
+    std::wstring value = LoadStringResource(stringId);
+    std::vector<std::wstring> result;
+    size_t start = 0;
+    while(start <= value.size()) {
+        size_t pos = value.find(L';', start);
+        if(pos == std::wstring::npos) {
+            result.emplace_back(value.substr(start));
+            break;
+        }
+        result.emplace_back(value.substr(start, pos - start));
+        start = pos + 1;
+    }
+    if(!value.empty() && value.back() == L';') {
+        result.emplace_back(std::wstring{});
+    }
+    return result;
+}
+
+std::wstring PidlToParsingName(const ByteVector& pidlBytes) {
+    if(pidlBytes.empty()) {
+        return {};
+    }
+    const auto* pidlData = reinterpret_cast<const ITEMIDLIST*>(pidlBytes.data());
+    PIDLIST_ABSOLUTE clone = ILCloneFull(pidlData);
+    if(clone == nullptr) {
+        return {};
+    }
+    PWSTR name = nullptr;
+    std::wstring result;
+    if(SUCCEEDED(SHGetNameFromIDList(clone, SIGDN_DESKTOPABSOLUTEPARSING, &name)) && name != nullptr) {
+        result.assign(name);
+        CoTaskMemFree(name);
+    }
+    CoTaskMemFree(clone);
+    return result;
+}
 
 class OptionsDialogPage {
 public:
@@ -63,7 +115,7 @@ public:
     }
 
     virtual void SyncFromConfig(const ConfigData& config) = 0;
-    virtual void SyncToConfig(ConfigData& config) const = 0;
+    virtual bool SyncToConfig(ConfigData& config) const = 0;
 
 protected:
     virtual void OnInitDialog(OptionsDialogImpl* /*owner*/) {}
@@ -113,29 +165,75 @@ public:
         : OptionsDialogPage(IDD_OPTIONS_WINDOW, L"Window") {}
 
     void SyncFromConfig(const ConfigData& config) override {
-        SetCheckbox(IDC_CAPTURE_NEW_WINDOWS, config.window.captureNewWindows);
-        SetCheckbox(IDC_CAPTURE_WECHAT_SELECTION, config.window.captureWeChatSelection);
-        SetCheckbox(IDC_RESTORE_SESSION, config.window.restoreSession);
-        SetCheckbox(IDC_RESTORE_ONLY_LOCKED, config.window.restoreOnlyLocked);
-        SetCheckbox(IDC_CLOSE_BTN_UNLOCKED, config.window.closeBtnClosesUnlocked);
-        SetCheckbox(IDC_CLOSE_BTN_SINGLE, config.window.closeBtnClosesSingleTab);
-        SetCheckbox(IDC_TRAY_ON_CLOSE, config.window.trayOnClose);
-        SetCheckbox(IDC_TRAY_ON_MINIMIZE, config.window.trayOnMinimize);
-        SetCheckbox(IDC_AUTO_HOOK_WINDOW, config.window.autoHookWindow);
-        SetCheckbox(IDC_SHOW_FAIL_NAV_MSG, config.window.showFailNavMsg);
+        const WindowSettings& window = config.window;
+        CheckRadioButton(Hwnd(), IDC_CAPTURE_ENABLE, IDC_CAPTURE_DISABLE,
+                         window.captureNewWindows ? IDC_CAPTURE_ENABLE : IDC_CAPTURE_DISABLE);
+        SetDefaultLocation(window.defaultLocation);
+
+        if(!window.restoreSession) {
+            CheckRadioButton(Hwnd(), IDC_SESSION_NEW, IDC_SESSION_RESTORE_LOCKED, IDC_SESSION_NEW);
+        } else if(window.restoreOnlyLocked) {
+            CheckRadioButton(Hwnd(), IDC_SESSION_NEW, IDC_SESSION_RESTORE_LOCKED, IDC_SESSION_RESTORE_LOCKED);
+        } else {
+            CheckRadioButton(Hwnd(), IDC_SESSION_NEW, IDC_SESSION_RESTORE_LOCKED, IDC_SESSION_RESTORE_ALL);
+        }
+
+        m_closeMode = DetermineCloseMode(window);
+        CheckRadioButton(Hwnd(), IDC_CLOSE_ACTION_WINDOW, IDC_CLOSE_ACTION_UNLOCKED,
+                         CloseModeToRadio(m_closeMode));
+
+        SetCheckbox(IDC_TRAY_ON_CLOSE, window.trayOnClose);
+        SetCheckbox(IDC_TRAY_ON_MINIMIZE, window.trayOnMinimize);
+        SetCheckbox(IDC_NEED_PLUS_BUTTON, window.needPlusButton);
+        SetCheckbox(IDC_AUTO_HOOK_WINDOW, window.autoHookWindow);
+        SetCheckbox(IDC_SHOW_FAIL_NAV_MSG, window.showFailNavMsg);
+        SetCheckbox(IDC_CAPTURE_WECHAT_SELECTION, window.captureWeChatSelection);
+
+        UpdateCloseRadiosEnabled();
     }
 
-    void SyncToConfig(ConfigData& config) const override {
-        config.window.captureNewWindows = IsChecked(IDC_CAPTURE_NEW_WINDOWS);
-        config.window.captureWeChatSelection = IsChecked(IDC_CAPTURE_WECHAT_SELECTION);
-        config.window.restoreSession = IsChecked(IDC_RESTORE_SESSION);
-        config.window.restoreOnlyLocked = IsChecked(IDC_RESTORE_ONLY_LOCKED);
-        config.window.closeBtnClosesUnlocked = IsChecked(IDC_CLOSE_BTN_UNLOCKED);
-        config.window.closeBtnClosesSingleTab = IsChecked(IDC_CLOSE_BTN_SINGLE);
-        config.window.trayOnClose = IsChecked(IDC_TRAY_ON_CLOSE);
-        config.window.trayOnMinimize = IsChecked(IDC_TRAY_ON_MINIMIZE);
-        config.window.autoHookWindow = IsChecked(IDC_AUTO_HOOK_WINDOW);
-        config.window.showFailNavMsg = IsChecked(IDC_SHOW_FAIL_NAV_MSG);
+    bool SyncToConfig(ConfigData& config) const override {
+        WindowSettings& window = config.window;
+        window.captureNewWindows = IsRadioChecked(IDC_CAPTURE_ENABLE);
+
+        std::wstring defaultLocation = GetDefaultLocationText();
+        if(defaultLocation.empty()) {
+            window.defaultLocation.clear();
+        } else {
+            ByteVector pidl = PidlFromDisplayName(defaultLocation.c_str());
+            if(pidl.empty()) {
+                ShowInvalidLocationMessage();
+                return false;
+            }
+            window.defaultLocation = std::move(pidl);
+        }
+
+        int sessionSelection = GetCheckedRadio(IDC_SESSION_NEW, IDC_SESSION_RESTORE_LOCKED);
+        if(sessionSelection == IDC_SESSION_NEW) {
+            window.restoreSession = false;
+            window.restoreOnlyLocked = false;
+        } else if(sessionSelection == IDC_SESSION_RESTORE_LOCKED) {
+            window.restoreSession = true;
+            window.restoreOnlyLocked = true;
+        } else {
+            window.restoreSession = true;
+            window.restoreOnlyLocked = false;
+        }
+
+        bool trayClose = IsChecked(IDC_TRAY_ON_CLOSE);
+        window.trayOnClose = trayClose;
+        window.trayOnMinimize = IsChecked(IDC_TRAY_ON_MINIMIZE);
+        window.needPlusButton = IsChecked(IDC_NEED_PLUS_BUTTON);
+        window.autoHookWindow = IsChecked(IDC_AUTO_HOOK_WINDOW);
+        window.showFailNavMsg = IsChecked(IDC_SHOW_FAIL_NAV_MSG);
+        window.captureWeChatSelection = IsChecked(IDC_CAPTURE_WECHAT_SELECTION);
+
+        if(!trayClose) {
+            m_closeMode = RadioToCloseMode(GetCheckedRadio(IDC_CLOSE_ACTION_WINDOW, IDC_CLOSE_ACTION_UNLOCKED));
+        }
+        ApplyCloseMode(window);
+
+        return true;
     }
 
 protected:
@@ -144,21 +242,213 @@ protected:
         if(font != nullptr) {
             ::SendMessageW(m_hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
         }
+        LoadStrings();
+        UpdateCloseRadiosEnabled();
+    }
+
+    BOOL OnCommand(WORD notifyCode, WORD commandId, HWND /*control*/, OptionsDialogImpl* /*owner*/) override {
+        if(notifyCode == BN_CLICKED) {
+            switch(commandId) {
+            case IDC_DEFAULT_LOCATION_BROWSE:
+                BrowseForDefaultLocation();
+                return TRUE;
+            case IDC_TRAY_ON_CLOSE:
+                UpdateCloseRadiosEnabled();
+                return TRUE;
+            case IDC_CLOSE_ACTION_WINDOW:
+            case IDC_CLOSE_ACTION_TAB:
+            case IDC_CLOSE_ACTION_UNLOCKED:
+                m_closeMode = RadioToCloseMode(commandId);
+                return TRUE;
+            default:
+                break;
+            }
+        }
+        return FALSE;
     }
 
 private:
-    void SetCheckbox(int controlId, bool value) {
-        if(Hwnd() != nullptr) {
-            ::SendDlgItemMessageW(Hwnd(), controlId, BM_SETCHECK, value ? BST_CHECKED : BST_UNCHECKED, 0);
+    enum class CloseMode {
+        Window,
+        CurrentTab,
+        Unlockeds
+    };
+
+    void LoadStrings() {
+        auto strings = LoadDelimitedStrings(IDS_OPTIONS_PAGE01_WINDOW);
+        if(strings.size() >= 17) {
+            SetDlgItemTextW(Hwnd(), IDC_WINDOW_HEADER, strings[0].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_WINDOW_SINGLE_LABEL, strings[1].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_CAPTURE_ENABLE, strings[2].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_CAPTURE_DISABLE, strings[3].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_DEFAULT_LOCATION_LABEL, strings[4].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_SESSION_LABEL, strings[5].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_SESSION_NEW, strings[6].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_SESSION_RESTORE_ALL, strings[7].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_SESSION_RESTORE_LOCKED, strings[8].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_CLOSE_BUTTON_LABEL, strings[9].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_CLOSE_ACTION_WINDOW, strings[10].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_CLOSE_ACTION_TAB, strings[11].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_CLOSE_ACTION_UNLOCKED, strings[12].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TRAY_LABEL, strings[13].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TRAY_ON_CLOSE, strings[14].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TRAY_ON_MINIMIZE, strings[15].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_NEED_PLUS_BUTTON, strings[16].c_str());
+        }
+        std::wstring others = LoadStringResource(IDS_OPTIONS_PAGE01_WINDOW_OTHERS);
+        if(!others.empty()) {
+            SetDlgItemTextW(Hwnd(), IDC_WINDOW_OTHERS_LABEL, others.c_str());
+        }
+        std::wstring autoHook = LoadStringResource(IDS_OPTIONS_WINDOW_AUTOHOOK);
+        if(!autoHook.empty()) {
+            SetDlgItemTextW(Hwnd(), IDC_AUTO_HOOK_WINDOW, autoHook.c_str());
+        }
+        std::wstring failMsg = LoadStringResource(IDS_OPTIONS_WINDOW_FAILMSG);
+        if(!failMsg.empty()) {
+            SetDlgItemTextW(Hwnd(), IDC_SHOW_FAIL_NAV_MSG, failMsg.c_str());
+        }
+        std::wstring captureSel = LoadStringResource(IDS_OPTIONS_WINDOW_CAPTURESEL);
+        if(!captureSel.empty()) {
+            SetDlgItemTextW(Hwnd(), IDC_CAPTURE_WECHAT_SELECTION, captureSel.c_str());
         }
     }
 
-    bool IsChecked(int controlId) const {
-        if(Hwnd() != nullptr) {
-            return ::SendDlgItemMessageW(Hwnd(), controlId, BM_GETCHECK, 0, 0) == BST_CHECKED;
-        }
-        return false;
+    void SetCheckbox(int controlId, bool value) {
+        ::SendDlgItemMessageW(Hwnd(), controlId, BM_SETCHECK, value ? BST_CHECKED : BST_UNCHECKED, 0);
     }
+
+    bool IsChecked(int controlId) const {
+        return ::SendDlgItemMessageW(Hwnd(), controlId, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    }
+
+    bool IsRadioChecked(int controlId) const {
+        return ::SendDlgItemMessageW(Hwnd(), controlId, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    }
+
+    void SetDefaultLocation(const ByteVector& pidl) {
+        std::wstring value = PidlToParsingName(pidl);
+        SetDlgItemTextW(Hwnd(), IDC_DEFAULT_LOCATION_EDIT, value.c_str());
+    }
+
+    std::wstring GetDefaultLocationText() const {
+        wchar_t buffer[1024];
+        int length = ::GetDlgItemTextW(Hwnd(), IDC_DEFAULT_LOCATION_EDIT, buffer, _countof(buffer));
+        if(length <= 0) {
+            return {};
+        }
+        return std::wstring(buffer, buffer + length);
+    }
+
+    void UpdateCloseRadiosEnabled() const {
+        bool enabled = !IsChecked(IDC_TRAY_ON_CLOSE);
+        EnableWindow(::GetDlgItem(Hwnd(), IDC_CLOSE_ACTION_WINDOW), enabled);
+        EnableWindow(::GetDlgItem(Hwnd(), IDC_CLOSE_ACTION_TAB), enabled);
+        EnableWindow(::GetDlgItem(Hwnd(), IDC_CLOSE_ACTION_UNLOCKED), enabled);
+    }
+
+    static CloseMode DetermineCloseMode(const WindowSettings& settings) {
+        if(settings.closeBtnClosesUnlocked) {
+            return CloseMode::Unlockeds;
+        }
+        if(settings.closeBtnClosesSingleTab) {
+            return CloseMode::CurrentTab;
+        }
+        return CloseMode::Window;
+    }
+
+    static int CloseModeToRadio(CloseMode mode) {
+        switch(mode) {
+        case CloseMode::CurrentTab:
+            return IDC_CLOSE_ACTION_TAB;
+        case CloseMode::Unlockeds:
+            return IDC_CLOSE_ACTION_UNLOCKED;
+        default:
+            return IDC_CLOSE_ACTION_WINDOW;
+        }
+    }
+
+    static CloseMode RadioToCloseMode(int radioId) {
+        switch(radioId) {
+        case IDC_CLOSE_ACTION_TAB:
+            return CloseMode::CurrentTab;
+        case IDC_CLOSE_ACTION_UNLOCKED:
+            return CloseMode::Unlockeds;
+        default:
+            return CloseMode::Window;
+        }
+    }
+
+    void ApplyCloseMode(WindowSettings& settings) const {
+        switch(m_closeMode) {
+        case CloseMode::CurrentTab:
+            settings.closeBtnClosesSingleTab = true;
+            settings.closeBtnClosesUnlocked = false;
+            break;
+        case CloseMode::Unlockeds:
+            settings.closeBtnClosesSingleTab = false;
+            settings.closeBtnClosesUnlocked = true;
+            break;
+        default:
+            settings.closeBtnClosesSingleTab = false;
+            settings.closeBtnClosesUnlocked = false;
+            break;
+        }
+    }
+
+    int GetCheckedRadio(int firstId, int lastId) const {
+        for(int id = firstId; id <= lastId; ++id) {
+            if(IsRadioChecked(id)) {
+                return id;
+            }
+        }
+        return firstId;
+    }
+
+    void CheckRadioButton(HWND hwnd, int firstId, int lastId, int checkId) {
+        ::CheckRadioButton(hwnd, firstId, lastId, checkId);
+    }
+
+    bool BrowseForDefaultLocation() {
+        CComPtr<IFileDialog> dialog;
+        if(FAILED(dialog.CoCreateInstance(CLSID_FileOpenDialog))) {
+            return false;
+        }
+        DWORD options = 0;
+        if(SUCCEEDED(dialog->GetOptions(&options))) {
+            dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_DONTADDTORECENT);
+        }
+        if(FAILED(dialog->Show(Hwnd()))) {
+            return false;
+        }
+        CComPtr<IShellItem> result;
+        if(FAILED(dialog->GetResult(&result))) {
+            return false;
+        }
+        PWSTR path = nullptr;
+        if(FAILED(result->GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING, &path))) {
+            return false;
+        }
+        std::wstring value(path);
+        CoTaskMemFree(path);
+        SetDlgItemTextW(Hwnd(), IDC_DEFAULT_LOCATION_EDIT, value.c_str());
+        return true;
+    }
+
+    void ShowInvalidLocationMessage() const {
+        std::wstring message = LoadStringResource(IDS_OPTIONS_INVALID_LOCATION);
+        if(message.empty()) {
+            message = L"Enter a valid shell path.";
+        }
+        std::wstring title = LoadStringResource(IDS_PROJNAME);
+        if(title.empty()) {
+            title = L"QTTabBar";
+        }
+        MessageBeep(MB_ICONWARNING);
+        MessageBoxW(Hwnd(), message.c_str(), title.c_str(), MB_ICONWARNING | MB_OK);
+        ::SetFocus(::GetDlgItem(Hwnd(), IDC_DEFAULT_LOCATION_EDIT));
+    }
+
+    mutable CloseMode m_closeMode = CloseMode::Window;
 };
 
 class PlaceholderOptionsPage final : public OptionsDialogPage {
@@ -167,7 +457,7 @@ public:
         : OptionsDialogPage(dialogId, title) {}
 
     void SyncFromConfig(const ConfigData& /*config*/) override {}
-    void SyncToConfig(ConfigData& /*config*/) const override {}
+    bool SyncToConfig(ConfigData& /*config*/) const override { return true; }
 };
 
 class OptionsDialogImpl {
@@ -374,10 +664,13 @@ private:
         }
     }
 
-    void SyncPagesToConfig() {
+    bool SyncPagesToConfig() {
         for(auto& page : m_pages) {
-            page->SyncToConfig(m_workingConfig);
+            if(!page->SyncToConfig(m_workingConfig)) {
+                return false;
+            }
         }
+        return true;
     }
 
     void SelectPage(int index) {
@@ -402,7 +695,9 @@ private:
     }
 
     void ApplyChanges(bool closeAfterApply) {
-        SyncPagesToConfig();
+        if(!SyncPagesToConfig()) {
+            return;
+        }
         WriteConfigToRegistry(m_workingConfig, false);
         UpdateConfigSideEffects(m_workingConfig, true);
         m_originalConfig = m_workingConfig;
