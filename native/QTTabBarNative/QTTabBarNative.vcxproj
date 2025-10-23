@@ -180,11 +180,13 @@
     <ClInclude Include="Config.h" />
     <ClInclude Include="ConfigEnums.h" />
     <ClInclude Include="ConfigTypes.h" />
+    <ClInclude Include="InstanceManagerNative.h" />
     <ClInclude Include="HookLibraryBridge.h" />
     <ClInclude Include="OptionsDialog.h" />
     <ClInclude Include="PluginContracts.h" />
     <ClInclude Include="PluginLibrary.h" />
     <ClInclude Include="PluginManagerNative.h" />
+    <ClInclude Include="QTButtonBar.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
@@ -204,11 +206,13 @@
     </ClCompile>
     <ClCompile Include="Config.cpp" />
     <ClCompile Include="HookLibraryBridge.cpp" />
+    <ClCompile Include="InstanceManagerNative.cpp" />
     <ClCompile Include="NativeExports.cpp" />
     <ClCompile Include="OptionsDialog.cpp" />
     <ClCompile Include="PluginLibrary.cpp" />
     <ClCompile Include="PluginManagerNative.cpp" />
     <ClCompile Include="AutoLoaderNative.cpp" />
+    <ClCompile Include="QTButtonBar.cpp" />
     <ClCompile Include="QTTabBarClass.cpp" />
     <ClCompile Include="TabBarHost.cpp" />
     <ClCompile Include="QTTabBarNative.cpp" />
@@ -220,6 +224,9 @@
     <Midl Include="QTTabBarNative.idl" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="AutoLoaderNative.rgs" />
+    <None Include="QTButtonBar.rgs" />
+    <None Include="QTTabBarClass.rgs" />
     <None Include="QTTabBarNative.def" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -26,3 +26,10 @@ DEFINE_GUID(IID_IQTTabBarClass, 0xe4f0e46a, 0x1eac, 0x4f67, 0x8c, 0x47, 0x58, 0x
 struct __declspec(uuid("E4F0E46A-1EAC-4F67-8C47-58C672A6433B")) IQTTabBarClass : public IUnknown
 {
 };
+
+// {E4F0E46A-1EAC-4F67-8C47-58C672A6433C}
+DEFINE_GUID(IID_IQTButtonBar, 0xe4f0e46a, 0x1eac, 0x4f67, 0x8c, 0x47, 0x58, 0xc6, 0x72, 0xa6, 0x43, 0x3c);
+
+struct __declspec(uuid("E4F0E46A-1EAC-4F67-8C47-58C672A6433C")) IQTButtonBar : public IUnknown
+{
+};
