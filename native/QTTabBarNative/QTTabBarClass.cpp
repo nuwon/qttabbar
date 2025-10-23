@@ -3,6 +3,10 @@
 #include "OptionsDialog.h"
 #include "TabBarHost.h"
 
+#include <Shldisp.h>
+
+#include "InstanceManagerNative.h"
+
 namespace {
 
 constexpr DWORD kRebarMaskStyle = RBBIM_STYLE | RBBIM_CHILD;
@@ -106,6 +110,7 @@ std::unordered_map<HWND, RebarBreakFixer*> RebarBreakFixer::s_instances;
 
 QTTabBarClass::QTTabBarClass() noexcept
     : m_hwndRebar(nullptr)
+    , m_explorerHwnd(nullptr)
     , m_minSize{16, 26}
     , m_maxSize{-1, -1}
     , m_closed(false)
@@ -126,6 +131,7 @@ HRESULT QTTabBarClass::FinalConstruct() {
 }
 
 void QTTabBarClass::FinalRelease() {
+    InstanceManagerNative::Instance().UnregisterTabBar(this);
     DestroyTimers();
     ReleaseRebarSubclass();
     if(m_tabHost) {
@@ -527,8 +533,99 @@ IFACEMETHODIMP QTTabBarClass::TranslateAcceleratorIO(MSG* pMsg) {
     return S_FALSE;
 }
 
+void QTTabBarClass::HandleButtonCommand(UINT commandId) {
+    if(!m_tabHost) {
+        return;
+    }
+
+    switch(commandId) {
+    case ID_BUTTONBAR_NAVIGATION_BACK:
+        m_tabHost->NavigateBack();
+        break;
+    case ID_BUTTONBAR_NAVIGATION_FORWARD:
+        m_tabHost->NavigateForward();
+        break;
+    case ID_BUTTONBAR_NEW_WINDOW:
+        if(m_spExplorer) {
+            std::wstring path = m_tabHost->GetCurrentPath();
+            if(!path.empty()) {
+                CComVariant url(path.c_str());
+                CComVariant flags(navOpenInNewWindow);
+                CComVariant empty;
+                m_spExplorer->Navigate2(&url, &flags, &empty, &empty, &empty);
+            }
+        }
+        break;
+    case ID_BUTTONBAR_CLONE_TAB:
+        m_tabHost->CloneActiveTab();
+        break;
+    case ID_BUTTONBAR_CLOSE_TAB:
+        m_tabHost->CloseActiveTab();
+        break;
+    case ID_BUTTONBAR_CLOSE_OTHERS:
+        m_tabHost->CloseAllTabsExceptActive();
+        break;
+    case ID_BUTTONBAR_CLOSE_LEFT:
+        m_tabHost->CloseTabsToLeft();
+        break;
+    case ID_BUTTONBAR_CLOSE_RIGHT:
+        m_tabHost->CloseTabsToRight();
+        break;
+    case ID_BUTTONBAR_CLOSE_WINDOW:
+        if(m_spExplorer) {
+            m_spExplorer->Quit();
+        }
+        break;
+    case ID_BUTTONBAR_GO_UP:
+        m_tabHost->GoUpOneLevel();
+        break;
+    case ID_BUTTONBAR_REFRESH:
+        m_tabHost->RefreshExplorer();
+        break;
+    case ID_BUTTONBAR_OPTIONS:
+        m_tabHost->OpenOptions();
+        break;
+    case ID_BUTTONBAR_LOCK_TAB:
+    case ID_BUTTONBAR_TOPMOST:
+    case ID_BUTTONBAR_WINDOW_OPACITY:
+    case ID_BUTTONBAR_FILTER_BAR:
+        ATLTRACE(L"QTTabBarClass::HandleButtonCommand command %u not yet implemented\n", commandId);
+        break;
+    default:
+        ATLTRACE(L"QTTabBarClass::HandleButtonCommand unknown command %u\n", commandId);
+        break;
+    }
+}
+
+std::vector<std::wstring> QTTabBarClass::GetOpenTabs() const {
+    if(!m_tabHost) {
+        return {};
+    }
+    return m_tabHost->GetOpenTabs();
+}
+
+std::vector<std::wstring> QTTabBarClass::GetClosedTabHistory() const {
+    if(!m_tabHost) {
+        return {};
+    }
+    return m_tabHost->GetClosedTabHistory();
+}
+
+void QTTabBarClass::ActivateTabByIndex(std::size_t index) {
+    if(m_tabHost) {
+        m_tabHost->ActivateTabByIndex(index);
+    }
+}
+
+void QTTabBarClass::RestoreClosedTabByIndex(std::size_t index) {
+    if(m_tabHost) {
+        m_tabHost->RestoreClosedTabByIndex(index);
+    }
+}
+
 IFACEMETHODIMP QTTabBarClass::SetSite(IUnknown* pUnkSite) {
     if(pUnkSite == nullptr) {
+        InstanceManagerNative::Instance().UnregisterTabBar(this);
         m_spInputObjectSite.Release();
         m_spServiceProvider.Release();
         m_spExplorer.Release();
@@ -540,9 +637,11 @@ IFACEMETHODIMP QTTabBarClass::SetSite(IUnknown* pUnkSite) {
             m_tabHost->ClearExplorer();
         }
         ReleaseRebarSubclass();
+        m_explorerHwnd = nullptr;
         return S_OK;
     }
 
+    InstanceManagerNative::Instance().UnregisterTabBar(this);
     m_spSite = pUnkSite;
     m_spInputObjectSite.Release();
     m_spServiceProvider.Release();
@@ -557,6 +656,15 @@ IFACEMETHODIMP QTTabBarClass::SetSite(IUnknown* pUnkSite) {
 
     if(m_tabHost) {
         m_tabHost->SetExplorer(m_spExplorer);
+    }
+
+    m_explorerHwnd = nullptr;
+    if(m_spExplorer) {
+        SHANDLE_PTR handle = 0;
+        if(SUCCEEDED(m_spExplorer->get_HWND(&handle))) {
+            m_explorerHwnd = reinterpret_cast<HWND>(handle);
+            InstanceManagerNative::Instance().RegisterTabBar(m_explorerHwnd, this);
+        }
     }
 
     CComPtr<IOleWindow> spOleWindow;

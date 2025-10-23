@@ -33,6 +33,19 @@ public:
     bool HasFocus() const noexcept { return m_hasFocus; }
     void OnParentDestroyed();
 
+    std::vector<std::wstring> GetOpenTabs() const;
+    std::vector<std::wstring> GetClosedTabHistory() const;
+    void ActivateTabByIndex(std::size_t index);
+    void RestoreClosedTabByIndex(std::size_t index);
+    void CloneActiveTab();
+    void CloseAllTabsExceptActive();
+    void CloseTabsToLeft();
+    void CloseTabsToRight();
+    void GoUpOneLevel();
+    void NavigateBack();
+    void NavigateForward();
+    std::wstring GetCurrentPath() const { return m_currentPath; }
+
     BEGIN_MSG_MAP(TabBarHost)
         MESSAGE_HANDLER(WM_CREATE, OnCreate)
         MESSAGE_HANDLER(WM_DESTROY, OnDestroy)

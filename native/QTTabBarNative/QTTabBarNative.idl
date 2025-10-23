@@ -11,10 +11,21 @@ library QTTabBarNativeLib
     {
     };
 
+    [uuid(E4F0E46A-1EAC-4F67-8C47-58C672A6433C)]
+    interface IQTButtonBar : IUnknown
+    {
+    };
+
     [uuid(D2BF470E-ED1C-487F-A333-2BD8835EB6CE)]
     coclass QTTabBarClass
     {
         [default] interface IQTTabBarClass;
+    };
+
+    [uuid(D2BF470E-ED1C-487F-A666-2BD8835EB6CE)]
+    coclass QTButtonBar
+    {
+        [default] interface IQTButtonBar;
     };
 
     [uuid(D2BF470E-ED1C-487F-A777-2BD8835EB6CE)]
