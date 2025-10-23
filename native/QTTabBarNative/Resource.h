@@ -11,6 +11,13 @@
 #define IDR_QTDESKTOPTOOL               105
 #define IDR_QTTABBAR_CONTEXT_MENU       200
 
+#define IDS_OPTIONS_PAGE01_WINDOW       2000
+#define IDS_OPTIONS_PAGE01_WINDOW_OTHERS 2001
+#define IDS_OPTIONS_INVALID_LOCATION    2002
+#define IDS_OPTIONS_WINDOW_AUTOHOOK     2003
+#define IDS_OPTIONS_WINDOW_FAILMSG      2004
+#define IDS_OPTIONS_WINDOW_CAPTURESEL   2005
+
 #define IDD_OPTIONS_DIALOG              300
 #define IDD_OPTIONS_WINDOW              301
 #define IDD_OPTIONS_TABS                302
@@ -59,6 +66,25 @@
 #define IDC_TRAY_ON_MINIMIZE            1107
 #define IDC_AUTO_HOOK_WINDOW            1108
 #define IDC_SHOW_FAIL_NAV_MSG           1109
+#define IDC_NEED_PLUS_BUTTON            1110
+
+#define IDC_WINDOW_HEADER               1200
+#define IDC_WINDOW_SINGLE_LABEL         1201
+#define IDC_DEFAULT_LOCATION_LABEL      1202
+#define IDC_SESSION_LABEL               1203
+#define IDC_CLOSE_BUTTON_LABEL          1204
+#define IDC_TRAY_LABEL                  1205
+#define IDC_WINDOW_OTHERS_LABEL         1206
+#define IDC_CAPTURE_ENABLE              1210
+#define IDC_CAPTURE_DISABLE             1211
+#define IDC_DEFAULT_LOCATION_EDIT       1212
+#define IDC_DEFAULT_LOCATION_BROWSE     1213
+#define IDC_SESSION_NEW                 1214
+#define IDC_SESSION_RESTORE_ALL         1215
+#define IDC_SESSION_RESTORE_LOCKED      1216
+#define IDC_CLOSE_ACTION_WINDOW         1217
+#define IDC_CLOSE_ACTION_TAB            1218
+#define IDC_CLOSE_ACTION_UNLOCKED       1219
 
 #define ID_CONTEXT_NEWTAB               32768
 #define ID_CONTEXT_CLOSETAB             32769
