@@ -2,7 +2,10 @@
 #include "InstanceManagerNative.h"
 
 #include "QTButtonBar.h"
+#include "QTDesktopTool.h"
 #include "QTTabBarClass.h"
+
+#include <algorithm>
 
 InstanceManagerNative& InstanceManagerNative::Instance() {
     static InstanceManagerNative instance;
@@ -61,6 +64,24 @@ void InstanceManagerNative::UnregisterButtonBar(QTButtonBar* buttonBar) {
     }
 }
 
+void InstanceManagerNative::RegisterDesktopTool(QTDesktopTool* desktopTool) {
+    if(desktopTool == nullptr) {
+        return;
+    }
+    std::scoped_lock lock(desktopMutex_);
+    if(std::find(desktopTools_.begin(), desktopTools_.end(), desktopTool) == desktopTools_.end()) {
+        desktopTools_.push_back(desktopTool);
+    }
+}
+
+void InstanceManagerNative::UnregisterDesktopTool(QTDesktopTool* desktopTool) {
+    if(desktopTool == nullptr) {
+        return;
+    }
+    std::scoped_lock lock(desktopMutex_);
+    desktopTools_.erase(std::remove(desktopTools_.begin(), desktopTools_.end(), desktopTool), desktopTools_.end());
+}
+
 QTTabBarClass* InstanceManagerNative::FindTabBar(HWND explorerHwnd) const {
     if(explorerHwnd == nullptr) {
         return nullptr;
@@ -89,5 +110,62 @@ void InstanceManagerNative::NotifyButtonCommand(HWND explorerHwnd, UINT commandI
     if(auto* tabBar = FindTabBar(explorerHwnd); tabBar != nullptr) {
         tabBar->HandleButtonCommand(commandId);
     }
+}
+
+void InstanceManagerNative::SetDesktopGroups(std::vector<DesktopGroupInfo> groups) {
+    std::vector<QTDesktopTool*> listeners;
+    {
+        std::scoped_lock lock(desktopMutex_);
+        desktopGroups_ = std::move(groups);
+        listeners = desktopTools_;
+    }
+    for(auto* tool : listeners) {
+        if(tool) {
+            tool->InvalidateModel();
+        }
+    }
+}
+
+void InstanceManagerNative::SetDesktopApplications(std::vector<DesktopApplicationInfo> applications) {
+    std::vector<QTDesktopTool*> listeners;
+    {
+        std::scoped_lock lock(desktopMutex_);
+        desktopApplications_ = std::move(applications);
+        listeners = desktopTools_;
+    }
+    for(auto* tool : listeners) {
+        if(tool) {
+            tool->InvalidateModel();
+        }
+    }
+}
+
+void InstanceManagerNative::SetDesktopRecentFiles(std::vector<std::wstring> files) {
+    std::vector<QTDesktopTool*> listeners;
+    {
+        std::scoped_lock lock(desktopMutex_);
+        desktopRecentFiles_ = std::move(files);
+        listeners = desktopTools_;
+    }
+    for(auto* tool : listeners) {
+        if(tool) {
+            tool->InvalidateModel();
+        }
+    }
+}
+
+std::vector<DesktopGroupInfo> InstanceManagerNative::GetDesktopGroups() const {
+    std::scoped_lock lock(desktopMutex_);
+    return desktopGroups_;
+}
+
+std::vector<DesktopApplicationInfo> InstanceManagerNative::GetDesktopApplications() const {
+    std::scoped_lock lock(desktopMutex_);
+    return desktopApplications_;
+}
+
+std::vector<std::wstring> InstanceManagerNative::GetDesktopRecentFiles() const {
+    std::scoped_lock lock(desktopMutex_);
+    return desktopRecentFiles_;
 }
 

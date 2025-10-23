@@ -66,6 +66,9 @@
     <ClInclude Include="QTButtonBar.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="QTDesktopTool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="TabBarHost.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -119,6 +122,9 @@
     <ClCompile Include="QTButtonBar.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="QTDesktopTool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="QTTabBarNative.rc">
@@ -135,6 +141,9 @@
       <Filter>Resource Files</Filter>
     </None>
     <None Include="QTButtonBar.rgs">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="QTDesktopTool.rgs">
       <Filter>Resource Files</Filter>
     </None>
     <None Include="QTTabBarClass.rgs">
