@@ -3,6 +3,8 @@
 #include "QTTabBarNativeGuids.h"
 #include "resource.h"
 
+class TabBarHost;
+
 class RebarBreakFixer;
 
 class ATL_NO_VTABLE QTTabBarClass final
@@ -91,14 +93,12 @@ private:
     HRESULT EnsureWindow();
     void DestroyTimers();
     void InitializeTimers();
-    void InitializeContextMenu();
-    void DestroyContextMenu();
     void EnsureRebarSubclass();
     void ReleaseRebarSubclass();
     void UpdateVisibility(BOOL fShow);
     void NotifyFocusChange(BOOL hasFocus);
-    void HandleContextCommand(UINT commandId);
     void StartDeferredRebarReset();
+    void PersistBreakPreference() const;
 
     bool ShouldHaveBreak() const;
     int ActiveRebarCount() const;
@@ -114,9 +114,8 @@ private:
     CComPtr<IUnknown> m_spSite;
 
     HWND m_hwndRebar;
-    HWND m_hwndHost;
-    HMENU m_hContextMenu;
     std::unique_ptr<RebarBreakFixer> m_rebarSubclass;
+    std::unique_ptr<TabBarHost> m_tabHost;
 
     SIZE m_minSize;
     SIZE m_maxSize;
@@ -124,5 +123,7 @@ private:
     bool m_visible;
     bool m_vertical;
     DWORD m_bandId;
+
+    friend class TabBarHost;
 };
 
