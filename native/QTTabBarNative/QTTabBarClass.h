@@ -20,6 +20,31 @@ class ATL_NO_VTABLE QTTabBarClass final
     , public ITabBarHostOwner
 {
 public:
+    static constexpr int kButtonSeparatorIndex = 0;
+    static constexpr int kButtonNavigationBackIndex = 1;
+    static constexpr int kButtonNavigationForwardIndex = 2;
+    static constexpr int kButtonGroupIndex = 3;
+    static constexpr int kButtonRecentTabsIndex = 4;
+    static constexpr int kButtonApplicationsIndex = 5;
+    static constexpr int kButtonNewWindowIndex = 6;
+    static constexpr int kButtonCloneTabIndex = 7;
+    static constexpr int kButtonLockTabIndex = 8;
+    static constexpr int kButtonMiscToolsIndex = 9;
+    static constexpr int kButtonTopMostIndex = 10;
+    static constexpr int kButtonCloseCurrentIndex = 11;
+    static constexpr int kButtonCloseOthersIndex = 12;
+    static constexpr int kButtonCloseWindowIndex = 13;
+    static constexpr int kButtonCloseLeftIndex = 14;
+    static constexpr int kButtonCloseRightIndex = 15;
+    static constexpr int kButtonGoUpIndex = 16;
+    static constexpr int kButtonRefreshIndex = 17;
+    static constexpr int kButtonSearchIndex = 18;
+    static constexpr int kButtonWindowOpacityIndex = 19;
+    static constexpr int kButtonFilterBarIndex = 20;
+    static constexpr int kButtonOptionsIndex = 21;
+    static constexpr int kButtonRecentFilesIndex = 22;
+    static constexpr int kButtonPluginsIndex = 23;
+
     QTTabBarClass() noexcept;
     ~QTTabBarClass() override;
 
@@ -95,6 +120,12 @@ public:
     LRESULT OnKillFocus(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnUnsetRebarMonitor(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
+    void HandleButtonCommand(UINT commandId);
+    std::vector<std::wstring> GetOpenTabs() const;
+    std::vector<std::wstring> GetClosedTabHistory() const;
+    void ActivateTabByIndex(std::size_t index);
+    void RestoreClosedTabByIndex(std::size_t index);
+
 private:
     HRESULT EnsureWindow();
     void DestroyTimers();
@@ -123,6 +154,7 @@ private:
     std::unique_ptr<RebarBreakFixer> m_rebarSubclass;
     std::unique_ptr<TabBarHost> m_tabHost;
 
+    HWND m_explorerHwnd;
     SIZE m_minSize;
     SIZE m_maxSize;
     bool m_closed;

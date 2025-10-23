@@ -588,6 +588,115 @@ void TabBarHost::OpenOptions() {
     qttabbar::OptionsDialog::Open(ownerHwnd);
 }
 
+std::vector<std::wstring> TabBarHost::GetOpenTabs() const {
+    std::vector<std::wstring> result;
+    result.reserve(m_tabs.size());
+    for(const auto& tab : m_tabs) {
+        result.push_back(tab.path);
+    }
+    return result;
+}
+
+std::vector<std::wstring> TabBarHost::GetClosedTabHistory() const {
+    return std::vector<std::wstring>(m_closedHistory.begin(), m_closedHistory.end());
+}
+
+void TabBarHost::ActivateTabByIndex(std::size_t index) {
+    ActivateTab(index);
+}
+
+void TabBarHost::RestoreClosedTabByIndex(std::size_t index) {
+    if(index >= m_closedHistory.size()) {
+        return;
+    }
+    auto it = m_closedHistory.begin();
+    std::advance(it, static_cast<std::ptrdiff_t>(index));
+    std::wstring path = *it;
+    m_closedHistory.erase(it);
+    AddTab(path, true, true);
+}
+
+void TabBarHost::CloneActiveTab() {
+    if(m_currentPath.empty()) {
+        return;
+    }
+    AddTab(m_currentPath, true, true);
+}
+
+void TabBarHost::CloseAllTabsExceptActive() {
+    auto it = std::find_if(m_tabs.begin(), m_tabs.end(), [](const TabDescriptor& tab) { return tab.active; });
+    if(it == m_tabs.end()) {
+        return;
+    }
+    std::wstring activePath = it->path;
+    for(auto iter = m_tabs.begin(); iter != m_tabs.end();) {
+        if(!iter->active) {
+            m_closedHistory.push_front(iter->path);
+            iter = m_tabs.erase(iter);
+        } else {
+            ++iter;
+        }
+    }
+    TrimClosedHistory();
+    if(!m_tabs.empty()) {
+        m_tabs.front().active = true;
+        m_tabs.front().path = activePath;
+        m_currentPath = activePath;
+    }
+    LogTabsState(L"CloseAllTabsExceptActive");
+}
+
+void TabBarHost::CloseTabsToLeft() {
+    auto it = std::find_if(m_tabs.begin(), m_tabs.end(), [](const TabDescriptor& tab) { return tab.active; });
+    if(it == m_tabs.end()) {
+        return;
+    }
+    for(auto iter = m_tabs.begin(); iter != it;) {
+        m_closedHistory.push_front(iter->path);
+        iter = m_tabs.erase(iter);
+    }
+    TrimClosedHistory();
+    LogTabsState(L"CloseTabsToLeft");
+}
+
+void TabBarHost::CloseTabsToRight() {
+    auto it = std::find_if(m_tabs.begin(), m_tabs.end(), [](const TabDescriptor& tab) { return tab.active; });
+    if(it == m_tabs.end()) {
+        return;
+    }
+    auto iter = std::next(it);
+    while(iter != m_tabs.end()) {
+        m_closedHistory.push_front(iter->path);
+        iter = m_tabs.erase(iter);
+    }
+    TrimClosedHistory();
+    LogTabsState(L"CloseTabsToRight");
+}
+
+void TabBarHost::GoUpOneLevel() {
+    if(m_currentPath.empty()) {
+        return;
+    }
+    std::wstring path = m_currentPath;
+    path.push_back(L'\0');
+    if(PathRemoveFileSpecW(path.data())) {
+        path.resize(wcslen(path.c_str()));
+        AddTab(path, true, true);
+    }
+}
+
+void TabBarHost::NavigateBack() {
+    if(m_spBrowser) {
+        m_spBrowser->GoBack();
+    }
+}
+
+void TabBarHost::NavigateForward() {
+    if(m_spBrowser) {
+        m_spBrowser->GoForward();
+    }
+}
+
 void TabBarHost::TrimClosedHistory() {
     while(m_closedHistory.size() > kMaxClosedHistory) {
         m_closedHistory.pop_back();
