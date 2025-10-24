@@ -648,6 +648,12 @@ void QTTabBarClass::RestoreClosedTabByIndex(std::size_t index) {
     }
 }
 
+void QTTabBarClass::OpenGroupByIndex(std::size_t index) {
+    if(m_tabHost) {
+        m_tabHost->OpenGroupByIndex(index);
+    }
+}
+
 IFACEMETHODIMP QTTabBarClass::SetSite(IUnknown* pUnkSite) {
     if(pUnkSite == nullptr) {
         InstanceManagerNative::Instance().UnregisterTabBar(this);

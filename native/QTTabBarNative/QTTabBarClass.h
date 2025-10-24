@@ -130,6 +130,7 @@ public:
     std::vector<std::wstring> GetClosedTabHistory() const;
     void ActivateTabByIndex(std::size_t index);
     void RestoreClosedTabByIndex(std::size_t index);
+    void OpenGroupByIndex(std::size_t index);
     HWND GetWindowHandle() const noexcept { return m_hWnd; }
 
 private:

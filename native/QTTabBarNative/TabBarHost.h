@@ -54,6 +54,7 @@ public:
     void NavigateForward();
     bool OpenCapturedWindow(const std::wstring& path);
     std::wstring GetCurrentPath() const { return m_currentPath; }
+    void OpenGroupByIndex(std::size_t index);
 
     BEGIN_MSG_MAP(TabBarHost)
         MESSAGE_HANDLER(WM_CREATE, OnCreate)
@@ -115,8 +116,6 @@ private:
     void DisconnectBrowserEvents();
     void StartTimers();
     void StopTimers();
-    void EnsureContextMenu();
-    void DestroyContextMenu();
     std::wstring VariantToString(const VARIANT* value) const;
     void UpdateActivePath(const std::wstring& path);
     void AddTab(const std::wstring& path, bool makeActive, bool allowDuplicate);
@@ -124,10 +123,27 @@ private:
     void ActivateNextTab();
     void ActivatePreviousTab();
     void CloseActiveTab();
+    void CloseTabAt(std::size_t index);
     void RestoreLastClosed();
     void RefreshExplorer();
     void OpenOptions();
     void TrimClosedHistory();
+    void LoadClosedHistory();
+    void PersistClosedHistory() const;
+    void ClearClosedHistory();
+    void RecordClosedEntry(const std::wstring& path);
+    std::optional<std::size_t> ResolveContextTabIndex() const;
+    std::wstring GetTabPath(std::size_t index) const;
+    bool IsTabLocked(std::size_t index) const;
+    void ToggleLockTab(std::size_t index);
+    void SetTabAlias(std::size_t index, const std::wstring& alias);
+    void CopyPathToClipboard(const std::wstring& path) const;
+    void OpenCommandPrompt(const std::wstring& path) const;
+    void ShowProperties(const std::wstring& path) const;
+    std::wstring LoadStringResource(UINT id, const wchar_t* fallback) const;
+    HMENU BuildContextMenu(std::size_t targetIndex, std::wstring targetPath);
+    bool PopulateGroupMenu(HMENU menu, const std::wstring& targetPath) const;
+    void PopulateHistoryMenu(HMENU menu) const;
     void LogTabsState(const wchar_t* source) const;
 
     void OnTabControlTabSelected(std::size_t index);
@@ -139,7 +155,6 @@ private:
     ITabBarHostOwner& m_owner;
     CComPtr<IWebBrowser2> m_spBrowser;
     DWORD m_browserCookie;
-    HMENU m_hContextMenu;
     std::unique_ptr<NativeTabControl> m_tabControl;
     std::deque<std::wstring> m_closedHistory;
     std::optional<std::wstring> m_pendingNavigation;
@@ -148,6 +163,7 @@ private:
     UINT m_dpiY;
     bool m_hasFocus;
     bool m_visible;
+    std::optional<std::size_t> m_contextTabIndex;
     friend class NativeTabControl;
 };
 

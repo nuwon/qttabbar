@@ -177,6 +177,8 @@
     </Midl>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AliasStoreNative.h" />
+    <ClInclude Include="ClosedTabHistoryStore.h" />
     <ClInclude Include="Config.h" />
     <ClInclude Include="ConfigEnums.h" />
     <ClInclude Include="ConfigTypes.h" />
@@ -189,6 +191,7 @@
     <ClInclude Include="PluginContracts.h" />
     <ClInclude Include="PluginLibrary.h" />
     <ClInclude Include="PluginManagerNative.h" />
+    <ClInclude Include="GroupsManagerNative.h" />
     <ClInclude Include="QTButtonBar.h" />
     <ClInclude Include="QTDesktopTool.h" />
     <ClInclude Include="targetver.h" />
@@ -201,6 +204,7 @@
     <ClInclude Include="Resource.h" />
     <ClInclude Include="NativeTabControl.h" />
     <ClInclude Include="TabBarHost.h" />
+    <ClInclude Include="TextInputDialog.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
@@ -210,6 +214,8 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="AliasStoreNative.cpp" />
+    <ClCompile Include="ClosedTabHistoryStore.cpp" />
     <ClCompile Include="Config.cpp" />
     <ClCompile Include="HookLibraryBridge.cpp" />
     <ClCompile Include="HookManagerNative.cpp" />
@@ -219,6 +225,7 @@
     <ClCompile Include="OptionsDialog.cpp" />
     <ClCompile Include="PluginLibrary.cpp" />
     <ClCompile Include="PluginManagerNative.cpp" />
+    <ClCompile Include="GroupsManagerNative.cpp" />
     <ClCompile Include="AutoLoaderNative.cpp" />
     <ClCompile Include="QTButtonBar.cpp" />
     <ClCompile Include="QTDesktopTool.cpp" />
@@ -226,6 +233,7 @@
     <ClCompile Include="QTSecondViewBar.cpp" />
     <ClCompile Include="NativeTabControl.cpp" />
     <ClCompile Include="TabBarHost.cpp" />
+    <ClCompile Include="TextInputDialog.cpp" />
     <ClCompile Include="QTTabBarNative.cpp" />
   </ItemGroup>
   <ItemGroup>

@@ -22,12 +22,14 @@ public:
     struct TabItem {
         std::wstring path;
         std::wstring title;
+        std::wstring alias;
         HICON icon = nullptr;
         TabMetrics metrics{};
         bool active = false;
         bool hovered = false;
         bool closeHovered = false;
         bool closePressed = false;
+        bool locked = false;
     };
 
     explicit NativeTabControl(TabBarHost& owner) noexcept;
@@ -57,13 +59,21 @@ public:
     std::wstring ActivatePreviousTab();
     std::optional<std::wstring> CloseTab(std::size_t index);
     std::optional<std::wstring> CloseActiveTab();
-    void CloseAllExcept(std::size_t index, std::deque<std::wstring>& closedHistory);
-    void CloseTabsToLeft(std::size_t index, std::deque<std::wstring>& closedHistory);
-    void CloseTabsToRight(std::size_t index, std::deque<std::wstring>& closedHistory);
+    std::vector<std::wstring> CloseAllExcept(std::size_t index);
+    std::vector<std::wstring> CloseTabsToLeft(std::size_t index);
+    std::vector<std::wstring> CloseTabsToRight(std::size_t index);
 
     std::optional<std::wstring> GetActivePath() const;
     std::size_t GetActiveIndex() const noexcept;
     std::vector<std::wstring> GetTabPaths() const;
+    std::wstring GetPath(std::size_t index) const;
+    bool IsLocked(std::size_t index) const;
+    bool CanCloseTab(std::size_t index) const;
+    bool HasClosableTabsToLeft(std::size_t index) const;
+    bool HasClosableTabsToRight(std::size_t index) const;
+    bool HasClosableOtherTabs(std::size_t index) const;
+    void SetLocked(std::size_t index, bool locked);
+    void SetAlias(std::size_t index, const std::wstring& alias);
     std::size_t GetCount() const noexcept { return m_tabs.size(); }
 
     void ApplyConfiguration(const qttabbar::ConfigData& config);
