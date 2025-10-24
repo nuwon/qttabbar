@@ -11,6 +11,7 @@
 #pragma comment(lib, "Shlwapi.lib")
 
 #include "OptionsDialog.h"
+#include "NativeTabControl.h"
 #include "QTTabBarClass.h"
 #include "Resource.h"
 
@@ -34,16 +35,16 @@ std::wstring NormalizeUrlToPath(const std::wstring& url) {
     return url;
 }
 
-std::wstring JoinTabList(const std::vector<TabBarHost::TabDescriptor>& tabs) {
+std::wstring JoinTabList(const std::vector<std::wstring>& tabs) {
     std::wstring result;
-    for(const auto& tab : tabs) {
-        if(tab.path.empty()) {
+    for(const auto& path : tabs) {
+        if(path.empty()) {
             continue;
         }
         if(!result.empty()) {
             result.append(L";");
         }
-        result.append(tab.path);
+        result.append(path);
     }
     return result;
 }
@@ -164,7 +165,8 @@ void TabBarHost::ShowContextMenu(const POINT& screenPoint) {
 }
 
 void TabBarHost::SaveSessionState() const {
-    std::wstring serialized = JoinTabList(m_tabs);
+    std::vector<std::wstring> paths = m_tabControl ? m_tabControl->GetTabPaths() : std::vector<std::wstring>();
+    std::wstring serialized = JoinTabList(paths);
     ATLTRACE(L"TabBarHost::SaveSessionState tabs='%s'\n", serialized.c_str());
 
     CRegKey key;
@@ -190,12 +192,14 @@ void TabBarHost::RestoreSessionState() {
             buffer.pop_back();
         }
         auto restored = SplitTabsString(buffer);
-        for(const auto& tabPath : restored) {
-            AddTab(tabPath, false, true);
-        }
-        if(!m_tabs.empty()) {
-            m_tabs.front().active = true;
-            m_currentPath = m_tabs.front().path;
+        if(m_tabControl) {
+            for(const auto& tabPath : restored) {
+                m_tabControl->AddTab(tabPath, false, true);
+            }
+            if(m_tabControl->GetCount() > 0) {
+                auto path = m_tabControl->ActivateTab(0);
+                m_currentPath = path;
+            }
         }
         LogTabsState(L"RestoreSessionState");
     }
@@ -260,6 +264,18 @@ void TabBarHost::OnParentDestroyed() {
 LRESULT TabBarHost::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled) {
     bHandled = TRUE;
     ATLTRACE(L"TabBarHost::OnCreate\n");
+    if(!m_tabControl) {
+        m_tabControl = std::make_unique<NativeTabControl>(*this);
+    }
+    if(m_tabControl && !m_tabControl->IsWindow()) {
+        RECT rc{};
+        ::GetClientRect(m_hWnd, &rc);
+        HWND hwnd = m_tabControl->Create(m_hWnd, rc, L"",
+                                         WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
+        if(hwnd == nullptr) {
+            return -1;
+        }
+    }
     EnsureContextMenu();
     StartTimers();
 #if defined(_WIN32_WINNT) && _WIN32_WINNT >= _WIN32_WINNT_WIN10
@@ -278,6 +294,23 @@ LRESULT TabBarHost::OnDestroy(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*
     SaveSessionState();
     DisconnectBrowserEvents();
     DestroyContextMenu();
+    if(m_tabControl) {
+        if(m_tabControl->IsWindow()) {
+            m_tabControl->DestroyWindow();
+        }
+        m_tabControl.reset();
+    }
+    return 0;
+}
+
+LRESULT TabBarHost::OnSize(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL& bHandled) {
+    bHandled = TRUE;
+    int width = LOWORD(lParam);
+    int height = HIWORD(lParam);
+    if(m_tabControl && m_tabControl->IsWindow()) {
+        ::MoveWindow(m_tabControl->m_hWnd, 0, 0, width, height, TRUE);
+        m_tabControl->EnsureLayout();
+    }
     return 0;
 }
 
@@ -321,6 +354,9 @@ LRESULT TabBarHost::OnSetFocus(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam
     bHandled = TRUE;
     m_hasFocus = true;
     ATLTRACE(L"TabBarHost::OnSetFocus\n");
+    if(m_tabControl && m_tabControl->IsWindow()) {
+        ::SetFocus(m_tabControl->m_hWnd);
+    }
     m_owner.NotifyTabHostFocusChange(TRUE);
     return 0;
 }
@@ -484,82 +520,61 @@ void TabBarHost::AddTab(const std::wstring& path, bool makeActive, bool allowDup
     if(path.empty()) {
         return;
     }
-
-    auto matchesPath = [&](const TabDescriptor& descriptor) { return _wcsicmp(descriptor.path.c_str(), path.c_str()) == 0; };
-    auto it = std::find_if(m_tabs.begin(), m_tabs.end(), matchesPath);
-
-    if(it == m_tabs.end() || allowDuplicate) {
-        TabDescriptor descriptor;
-        descriptor.path = path;
-        descriptor.active = false;
-        m_tabs.push_back(std::move(descriptor));
-        it = std::prev(m_tabs.end());
+    if(m_tabControl) {
+        m_tabControl->AddTab(path, makeActive, allowDuplicate);
     }
-
-    if(makeActive && it != m_tabs.end()) {
-        for(auto& tab : m_tabs) {
-            tab.active = false;
-        }
-        it->active = true;
+    if(makeActive) {
+        m_currentPath = path;
     }
 }
 
 void TabBarHost::ActivateTab(std::size_t index) {
-    if(index >= m_tabs.size()) {
+    if(!m_tabControl) {
         return;
     }
-    for(auto& tab : m_tabs) {
-        tab.active = false;
+    std::wstring path = m_tabControl->ActivateTab(index);
+    if(!path.empty()) {
+        m_currentPath = path;
     }
-    m_tabs[index].active = true;
-    m_currentPath = m_tabs[index].path;
     LogTabsState(L"ActivateTab");
 }
 
 void TabBarHost::ActivateNextTab() {
-    if(m_tabs.empty()) {
+    if(!m_tabControl || m_tabControl->GetCount() == 0) {
         return;
     }
-    auto it = std::find_if(m_tabs.begin(), m_tabs.end(), [](const TabDescriptor& tab) { return tab.active; });
-    if(it == m_tabs.end()) {
-        ActivateTab(0);
-        return;
+    std::wstring path = m_tabControl->ActivateNextTab();
+    if(!path.empty()) {
+        m_currentPath = path;
     }
-    std::size_t index = static_cast<std::size_t>(std::distance(m_tabs.begin(), it));
-    index = (index + 1) % m_tabs.size();
-    ActivateTab(index);
 }
 
 void TabBarHost::ActivatePreviousTab() {
-    if(m_tabs.empty()) {
+    if(!m_tabControl || m_tabControl->GetCount() == 0) {
         return;
     }
-    auto it = std::find_if(m_tabs.begin(), m_tabs.end(), [](const TabDescriptor& tab) { return tab.active; });
-    if(it == m_tabs.end()) {
-        ActivateTab(0);
-        return;
+    std::wstring path = m_tabControl->ActivatePreviousTab();
+    if(!path.empty()) {
+        m_currentPath = path;
     }
-    std::size_t index = static_cast<std::size_t>(std::distance(m_tabs.begin(), it));
-    index = (index == 0 ? m_tabs.size() - 1 : index - 1);
-    ActivateTab(index);
 }
 
 void TabBarHost::CloseActiveTab() {
-    auto it = std::find_if(m_tabs.begin(), m_tabs.end(), [](const TabDescriptor& tab) { return tab.active; });
-    if(it == m_tabs.end()) {
+    if(!m_tabControl || m_tabControl->GetCount() == 0) {
         return;
     }
-    ATLTRACE(L"TabBarHost::CloseActiveTab %s\n", it->path.c_str());
-    m_closedHistory.push_front(it->path);
-    TrimClosedHistory();
-    m_tabs.erase(it);
-    if(!m_tabs.empty()) {
-        m_tabs.front().active = true;
-        m_currentPath = m_tabs.front().path;
-    } else {
-        m_currentPath.clear();
+    auto closed = m_tabControl->CloseActiveTab();
+    if(closed) {
+        ATLTRACE(L"TabBarHost::CloseActiveTab %s\n", closed->c_str());
+        m_closedHistory.push_front(*closed);
+        TrimClosedHistory();
+        if(auto active = m_tabControl->GetActivePath()) {
+            m_currentPath = *active;
+        } else {
+            m_currentPath.clear();
+        }
+        LogTabsState(L"CloseActiveTab");
     }
-    LogTabsState(L"CloseActiveTab");
 }
 
 void TabBarHost::RestoreLastClosed() {
@@ -589,12 +604,10 @@ void TabBarHost::OpenOptions() {
 }
 
 std::vector<std::wstring> TabBarHost::GetOpenTabs() const {
-    std::vector<std::wstring> result;
-    result.reserve(m_tabs.size());
-    for(const auto& tab : m_tabs) {
-        result.push_back(tab.path);
+    if(!m_tabControl) {
+        return {};
     }
-    return result;
+    return m_tabControl->GetTabPaths();
 }
 
 std::vector<std::wstring> TabBarHost::GetClosedTabHistory() const {
@@ -624,51 +637,34 @@ void TabBarHost::CloneActiveTab() {
 }
 
 void TabBarHost::CloseAllTabsExceptActive() {
-    auto it = std::find_if(m_tabs.begin(), m_tabs.end(), [](const TabDescriptor& tab) { return tab.active; });
-    if(it == m_tabs.end()) {
+    if(!m_tabControl || m_tabControl->GetCount() == 0) {
         return;
     }
-    std::wstring activePath = it->path;
-    for(auto iter = m_tabs.begin(); iter != m_tabs.end();) {
-        if(!iter->active) {
-            m_closedHistory.push_front(iter->path);
-            iter = m_tabs.erase(iter);
-        } else {
-            ++iter;
-        }
-    }
+    std::size_t activeIndex = m_tabControl->GetActiveIndex();
+    m_tabControl->CloseAllExcept(activeIndex, m_closedHistory);
     TrimClosedHistory();
-    if(!m_tabs.empty()) {
-        m_tabs.front().active = true;
-        m_tabs.front().path = activePath;
-        m_currentPath = activePath;
+    if(auto active = m_tabControl->GetActivePath()) {
+        m_currentPath = *active;
     }
     LogTabsState(L"CloseAllTabsExceptActive");
 }
 
 void TabBarHost::CloseTabsToLeft() {
-    auto it = std::find_if(m_tabs.begin(), m_tabs.end(), [](const TabDescriptor& tab) { return tab.active; });
-    if(it == m_tabs.end()) {
+    if(!m_tabControl || m_tabControl->GetCount() == 0) {
         return;
     }
-    for(auto iter = m_tabs.begin(); iter != it;) {
-        m_closedHistory.push_front(iter->path);
-        iter = m_tabs.erase(iter);
-    }
+    std::size_t activeIndex = m_tabControl->GetActiveIndex();
+    m_tabControl->CloseTabsToLeft(activeIndex, m_closedHistory);
     TrimClosedHistory();
     LogTabsState(L"CloseTabsToLeft");
 }
 
 void TabBarHost::CloseTabsToRight() {
-    auto it = std::find_if(m_tabs.begin(), m_tabs.end(), [](const TabDescriptor& tab) { return tab.active; });
-    if(it == m_tabs.end()) {
+    if(!m_tabControl || m_tabControl->GetCount() == 0) {
         return;
     }
-    auto iter = std::next(it);
-    while(iter != m_tabs.end()) {
-        m_closedHistory.push_front(iter->path);
-        iter = m_tabs.erase(iter);
-    }
+    std::size_t activeIndex = m_tabControl->GetActiveIndex();
+    m_tabControl->CloseTabsToRight(activeIndex, m_closedHistory);
     TrimClosedHistory();
     LogTabsState(L"CloseTabsToRight");
 }
@@ -713,7 +709,51 @@ void TabBarHost::TrimClosedHistory() {
 }
 
 void TabBarHost::LogTabsState(const wchar_t* source) const {
-    std::wstring state = JoinTabList(m_tabs);
+    if(!m_tabControl) {
+        return;
+    }
+    std::wstring state = JoinTabList(m_tabControl->GetTabPaths());
     ATLTRACE(L"TabBarHost::LogTabsState %s tabs='%s'\n", source, state.c_str());
 }
 
+void TabBarHost::OnTabControlTabSelected(std::size_t index) {
+    ATLTRACE(L"TabBarHost::OnTabControlTabSelected index=%u\n", static_cast<UINT>(index));
+    ActivateTab(index);
+}
+
+void TabBarHost::OnTabControlCloseRequested(std::size_t index) {
+    if(!m_tabControl) {
+        return;
+    }
+
+    ATLTRACE(L"TabBarHost::OnTabControlCloseRequested index=%u\n", static_cast<UINT>(index));
+    auto closed = m_tabControl->CloseTab(index);
+    if(!closed) {
+        return;
+    }
+
+    m_closedHistory.push_front(*closed);
+    TrimClosedHistory();
+
+    if(auto active = m_tabControl->GetActivePath()) {
+        m_currentPath = *active;
+    } else {
+        m_currentPath.clear();
+    }
+
+    LogTabsState(L"OnTabControlCloseRequested");
+}
+
+void TabBarHost::OnTabControlContextMenuRequested(std::optional<std::size_t> /*index*/, const POINT& screenPoint) {
+    ATLTRACE(L"TabBarHost::OnTabControlContextMenuRequested (%ld,%ld)\n", screenPoint.x, screenPoint.y);
+    ShowContextMenu(screenPoint);
+}
+
+void TabBarHost::OnTabControlNewTabRequested() {
+    ATLTRACE(L"TabBarHost::OnTabControlNewTabRequested\n");
+    AddTab(m_currentPath, true, true);
+}
+
+void TabBarHost::OnTabControlBeginDrag(std::size_t index, const POINT& screenPoint) {
+    ATLTRACE(L"TabBarHost::OnTabControlBeginDrag index=%u (%ld,%ld)\n", static_cast<UINT>(index), screenPoint.x, screenPoint.y);
+}
