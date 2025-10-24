@@ -399,6 +399,15 @@ LRESULT QTTabBarClass::OnCaptureNewWindow(UINT /*uMsg*/, WPARAM wParam, LPARAM /
     return handled ? TRUE : FALSE;
 }
 
+LRESULT QTTabBarClass::OnTraySelection(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& bHandled) {
+    bHandled = TRUE;
+    int index = static_cast<int>(wParam);
+    if(index >= 0) {
+        ActivateTabByIndex(static_cast<std::size_t>(index));
+    }
+    return 0;
+}
+
 IFACEMETHODIMP QTTabBarClass::GetWindow(HWND* phwnd) {
     if(phwnd == nullptr) {
         return E_POINTER;

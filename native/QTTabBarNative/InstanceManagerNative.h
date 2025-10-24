@@ -51,7 +51,9 @@ public:
     std::vector<std::wstring> GetDesktopRecentFiles() const;
 
 private:
-    InstanceManagerNative() = default;
+    InstanceManagerNative();
+
+    void OnSelectionRequested(HWND tabBarHwnd, int index);
 
     struct Entry {
         QTTabBarClass* tabBar = nullptr;

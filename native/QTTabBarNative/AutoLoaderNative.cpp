@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "AutoLoaderNative.h"
 
+#include "InstanceManager.h"
+
 #include <OleAuto.h>
 
 #include <algorithm>
@@ -35,10 +37,12 @@ IFACEMETHODIMP AutoLoaderNative::SetSite(IUnknown* pUnkSite) {
     m_spSite.Release();
 
     if(pUnkSite == nullptr) {
+        InstanceManager::Instance().UnregisterAutoLoader(this);
         return S_OK;
     }
 
     m_spSite = pUnkSite;
+    InstanceManager::Instance().RegisterAutoLoader(this);
 
     CComPtr<IServiceProvider> spServiceProvider;
     HRESULT hr = pUnkSite->QueryInterface(IID_PPV_ARGS(&spServiceProvider));
