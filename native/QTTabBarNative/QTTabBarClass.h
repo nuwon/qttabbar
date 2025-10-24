@@ -74,6 +74,7 @@ public:
         MESSAGE_HANDLER(WM_SETFOCUS, OnSetFocus)
         MESSAGE_HANDLER(WM_KILLFOCUS, OnKillFocus)
         MESSAGE_HANDLER(qttabbar::hooks::WM_APP_CAPTURE_NEW_WINDOW, OnCaptureNewWindow)
+        MESSAGE_HANDLER(qttabbar::hooks::WM_APP_TRAY_SELECT, OnTraySelection)
         MESSAGE_HANDLER(WM_APP_UNSUBCLASS, OnUnsetRebarMonitor)
         CHAIN_MSG_MAP(CWindowImpl<QTTabBarClass, CWindow, CControlWinTraits>)
     END_MSG_MAP()
@@ -122,6 +123,7 @@ public:
     LRESULT OnKillFocus(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnUnsetRebarMonitor(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnCaptureNewWindow(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnTraySelection(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     void HandleButtonCommand(UINT commandId);
     std::vector<std::wstring> GetOpenTabs() const;

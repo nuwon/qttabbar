@@ -1,15 +1,26 @@
 #include "pch.h"
 #include "InstanceManagerNative.h"
 
+#include "InstanceManager.h"
+
 #include "QTButtonBar.h"
+#include "HookMessages.h"
 #include "QTDesktopTool.h"
 #include "QTTabBarClass.h"
 
 #include <algorithm>
+#include <cstddef>
 
 InstanceManagerNative& InstanceManagerNative::Instance() {
     static InstanceManagerNative instance;
     return instance;
+}
+
+InstanceManagerNative::InstanceManagerNative() {
+    InstanceManager::Instance().EnsureInitialized();
+    InstanceManager::Instance().SetSelectionCallback([this](HWND tabBarHwnd, int index) {
+        OnSelectionRequested(tabBarHwnd, index);
+    });
 }
 
 void InstanceManagerNative::RegisterTabBar(HWND explorerHwnd, QTTabBarClass* tabBar) {
@@ -19,12 +30,15 @@ void InstanceManagerNative::RegisterTabBar(HWND explorerHwnd, QTTabBarClass* tab
     std::scoped_lock lock(mutex_);
     Entry& entry = map_[explorerHwnd];
     entry.tabBar = tabBar;
+
+    InstanceManager::Instance().RegisterTabHost(explorerHwnd, tabBar);
 }
 
 void InstanceManagerNative::UnregisterTabBar(QTTabBarClass* tabBar) {
     if(tabBar == nullptr) {
         return;
     }
+    InstanceManager::Instance().UnregisterTabHost(tabBar);
     std::scoped_lock lock(mutex_);
     for(auto it = map_.begin(); it != map_.end();) {
         if(it->second.tabBar == tabBar) {
@@ -45,12 +59,15 @@ void InstanceManagerNative::RegisterButtonBar(HWND explorerHwnd, QTButtonBar* bu
     std::scoped_lock lock(mutex_);
     Entry& entry = map_[explorerHwnd];
     entry.buttonBar = buttonBar;
+
+    InstanceManager::Instance().RegisterButtonBar(explorerHwnd, buttonBar);
 }
 
 void InstanceManagerNative::UnregisterButtonBar(QTButtonBar* buttonBar) {
     if(buttonBar == nullptr) {
         return;
     }
+    InstanceManager::Instance().UnregisterButtonBar(buttonBar);
     std::scoped_lock lock(mutex_);
     for(auto it = map_.begin(); it != map_.end();) {
         if(it->second.buttonBar == buttonBar) {
@@ -72,6 +89,8 @@ void InstanceManagerNative::RegisterDesktopTool(QTDesktopTool* desktopTool) {
     if(std::find(desktopTools_.begin(), desktopTools_.end(), desktopTool) == desktopTools_.end()) {
         desktopTools_.push_back(desktopTool);
     }
+
+    InstanceManager::Instance().RegisterDesktopTool(desktopTool);
 }
 
 void InstanceManagerNative::UnregisterDesktopTool(QTDesktopTool* desktopTool) {
@@ -80,6 +99,8 @@ void InstanceManagerNative::UnregisterDesktopTool(QTDesktopTool* desktopTool) {
     }
     std::scoped_lock lock(desktopMutex_);
     desktopTools_.erase(std::remove(desktopTools_.begin(), desktopTools_.end(), desktopTool), desktopTools_.end());
+
+    InstanceManager::Instance().UnregisterDesktopTool(desktopTool);
 }
 
 QTTabBarClass* InstanceManagerNative::FindTabBar(HWND explorerHwnd) const {
@@ -142,6 +163,7 @@ void InstanceManagerNative::SetDesktopGroups(std::vector<DesktopGroupInfo> group
         desktopGroups_ = std::move(groups);
         listeners = desktopTools_;
     }
+    InstanceManager::Instance().Broadcast(L"desktop.groups", L"", {});
     for(auto* tool : listeners) {
         if(tool) {
             tool->InvalidateModel();
@@ -156,6 +178,7 @@ void InstanceManagerNative::SetDesktopApplications(std::vector<DesktopApplicatio
         desktopApplications_ = std::move(applications);
         listeners = desktopTools_;
     }
+    InstanceManager::Instance().Broadcast(L"desktop.apps", L"", {});
     for(auto* tool : listeners) {
         if(tool) {
             tool->InvalidateModel();
@@ -170,10 +193,30 @@ void InstanceManagerNative::SetDesktopRecentFiles(std::vector<std::wstring> file
         desktopRecentFiles_ = std::move(files);
         listeners = desktopTools_;
     }
+    InstanceManager::Instance().Broadcast(L"desktop.recent", L"", {});
     for(auto* tool : listeners) {
         if(tool) {
             tool->InvalidateModel();
         }
+    }
+}
+
+void InstanceManagerNative::OnSelectionRequested(HWND tabBarHwnd, int index) {
+    if(tabBarHwnd == nullptr || index < 0) {
+        return;
+    }
+    QTTabBarClass* tabBar = nullptr;
+    {
+        std::scoped_lock lock(mutex_);
+        for(const auto& [_, entry] : map_) {
+            if(entry.tabBar != nullptr && entry.tabBar->GetWindowHandle() == tabBarHwnd) {
+                tabBar = entry.tabBar;
+                break;
+            }
+        }
+    }
+    if(tabBar != nullptr) {
+        ::PostMessageW(tabBar->GetWindowHandle(), qttabbar::hooks::WM_APP_TRAY_SELECT, static_cast<WPARAM>(index), 0);
     }
 }
 
