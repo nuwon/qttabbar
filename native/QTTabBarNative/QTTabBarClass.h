@@ -132,6 +132,7 @@ public:
     void RestoreClosedTabByIndex(std::size_t index);
     void OpenGroupByIndex(std::size_t index);
     HWND GetWindowHandle() const noexcept { return m_hWnd; }
+    std::wstring GetCurrentPath() const;
 
 private:
     HRESULT EnsureWindow();

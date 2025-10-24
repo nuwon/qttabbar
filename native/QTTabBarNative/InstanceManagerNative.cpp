@@ -7,6 +7,9 @@
 #include "HookMessages.h"
 #include "QTDesktopTool.h"
 #include "QTTabBarClass.h"
+#include "AppsManagerNative.h"
+#include "RecentFileHistoryNative.h"
+#include "Config.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -21,6 +24,12 @@ InstanceManagerNative::InstanceManagerNative() {
     InstanceManager::Instance().SetSelectionCallback([this](HWND tabBarHwnd, int index) {
         OnSelectionRequested(tabBarHwnd, index);
     });
+
+    qttabbar::ConfigData config = qttabbar::LoadConfigFromRegistry();
+    qttabbar::AppsManagerNative::Instance().Reload();
+    SetDesktopApplications(qttabbar::AppsManagerNative::Instance().BuildDesktopApplications());
+    qttabbar::RecentFileHistoryNative::Instance().Reload(config.misc.fileHistoryCount);
+    SetDesktopRecentFiles(qttabbar::RecentFileHistoryNative::Instance().GetRecentFiles());
 }
 
 void InstanceManagerNative::RegisterTabBar(HWND explorerHwnd, QTTabBarClass* tabBar) {

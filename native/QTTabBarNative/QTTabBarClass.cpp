@@ -629,6 +629,13 @@ std::vector<std::wstring> QTTabBarClass::GetOpenTabs() const {
     return m_tabHost->GetOpenTabs();
 }
 
+std::wstring QTTabBarClass::GetCurrentPath() const {
+    if(!m_tabHost) {
+        return {};
+    }
+    return m_tabHost->GetCurrentPath();
+}
+
 std::vector<std::wstring> QTTabBarClass::GetClosedTabHistory() const {
     if(!m_tabHost) {
         return {};
