@@ -178,6 +178,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="AliasStoreNative.h" />
+    <ClInclude Include="AppsManagerNative.h" />
     <ClInclude Include="ClosedTabHistoryStore.h" />
     <ClInclude Include="Config.h" />
     <ClInclude Include="ConfigEnums.h" />
@@ -201,6 +202,7 @@
     <ClInclude Include="QTTabBarClass.h" />
     <ClInclude Include="QTSecondViewBar.h" />
     <ClInclude Include="QTTabBarNativeGuids.h" />
+    <ClInclude Include="RecentFileHistoryNative.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="NativeTabControl.h" />
     <ClInclude Include="TabBarHost.h" />
@@ -215,6 +217,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="AliasStoreNative.cpp" />
+    <ClCompile Include="AppsManagerNative.cpp" />
     <ClCompile Include="ClosedTabHistoryStore.cpp" />
     <ClCompile Include="Config.cpp" />
     <ClCompile Include="HookLibraryBridge.cpp" />
@@ -235,6 +238,7 @@
     <ClCompile Include="TabBarHost.cpp" />
     <ClCompile Include="TextInputDialog.cpp" />
     <ClCompile Include="QTTabBarNative.cpp" />
+    <ClCompile Include="RecentFileHistoryNative.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="QTTabBarNative.rc" />

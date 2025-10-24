@@ -5,17 +5,23 @@
 #include <Shlwapi.h>
 
 #include <algorithm>
+#include <cstring>
 
 #include "Config.h"
 #include "InstanceManagerNative.h"
 #include "PluginManagerNative.h"
 #include "GroupsManagerNative.h"
 #include "QTTabBarClass.h"
+#include "AppsManagerNative.h"
+#include "RecentFileHistoryNative.h"
+#include "PluginContracts.h"
 
 using qttabbar::ConfigData;
 using qttabbar::LoadConfigFromRegistry;
 using qttabbar::plugins::PluginManagerNative;
 using qttabbar::plugins::PluginMetadataNative;
+using qttabbar::plugins::PluginMenuType;
+using qttabbar::plugins::PluginEndCode;
 
 namespace {
 constexpr UINT kToolbarId = 100;
@@ -43,6 +49,35 @@ std::wstring ExtractLeafName(const std::wstring& path) {
         return buffer;
     }
     return path;
+}
+
+bool CopyTextToClipboard(HWND owner, const std::wstring& text) {
+    if(!::OpenClipboard(owner)) {
+        return false;
+    }
+    struct ClipboardCloser {
+        ~ClipboardCloser() { ::CloseClipboard(); }
+    } closer;
+    if(!::EmptyClipboard()) {
+        return false;
+    }
+    size_t bytes = (text.size() + 1) * sizeof(wchar_t);
+    HGLOBAL handle = ::GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if(handle == nullptr) {
+        return false;
+    }
+    void* data = ::GlobalLock(handle);
+    if(!data) {
+        ::GlobalFree(handle);
+        return false;
+    }
+    std::memcpy(data, text.c_str(), bytes);
+    ::GlobalUnlock(handle);
+    if(::SetClipboardData(CF_UNICODETEXT, handle) == nullptr) {
+        ::GlobalFree(handle);
+        return false;
+    }
+    return true;
 }
 
 }  // namespace
@@ -312,7 +347,7 @@ void QTButtonBar::ShowDropdown(UINT commandId, const POINT& screenPoint) {
         BuildRecentFilesMenu(menu.handle);
         break;
     case ID_BUTTONBAR_APPLICATIONS:
-        BuildPluginsMenu(menu.handle);
+        BuildApplicationsMenu(menu.handle);
         break;
     case ID_BUTTONBAR_MISC_TOOLS:
         BuildMiscToolsMenu(menu.handle);
@@ -392,6 +427,56 @@ void QTButtonBar::BuildGroupsMenu(HMENU menu) {
         ::AppendMenuW(menu, MF_STRING, id, groups[index].name.c_str());
         m_menuHandlers[id] = [tabBar, index]() { tabBar->OpenGroupByIndex(index); };
     }
+
+    if(groups.size() > 1) {
+        HMENU reorder = ::CreatePopupMenu();
+        if(reorder != nullptr) {
+            ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+            for(size_t index = 0; index < groups.size(); ++index) {
+                if(index > 0) {
+                    UINT upId = 0;
+                    if(TryAllocateDynamicCommand(upId)) {
+                        std::wstring label = L"Move up: " + groups[index].name;
+                        ::AppendMenuW(reorder, MF_STRING, upId, label.c_str());
+                        m_menuHandlers[upId] = [index]() {
+                            auto all = qttabbar::GroupsManagerNative::Instance().GetGroups();
+                            if(index >= all.size()) {
+                                return;
+                            }
+                            std::vector<std::wstring> order;
+                            order.reserve(all.size());
+                            for(const auto& group : all) {
+                                order.push_back(group.name);
+                            }
+                            std::swap(order[index], order[index - 1]);
+                            qttabbar::GroupsManagerNative::Instance().Reorder(order);
+                        };
+                    }
+                }
+                if(index + 1 < groups.size()) {
+                    UINT downId = 0;
+                    if(TryAllocateDynamicCommand(downId)) {
+                        std::wstring label = L"Move down: " + groups[index].name;
+                        ::AppendMenuW(reorder, MF_STRING, downId, label.c_str());
+                        m_menuHandlers[downId] = [index]() {
+                            auto all = qttabbar::GroupsManagerNative::Instance().GetGroups();
+                            if(index + 1 >= all.size()) {
+                                return;
+                            }
+                            std::vector<std::wstring> order;
+                            order.reserve(all.size());
+                            for(const auto& group : all) {
+                                order.push_back(group.name);
+                            }
+                            std::swap(order[index], order[index + 1]);
+                            qttabbar::GroupsManagerNative::Instance().Reorder(order);
+                        };
+                    }
+                }
+            }
+            ::AppendMenuW(menu, MF_POPUP | MF_STRING, reinterpret_cast<UINT_PTR>(reorder), L"Reorder");
+        }
+    }
 }
 
 void QTButtonBar::BuildRecentTabsMenu(HMENU menu) {
@@ -423,7 +508,112 @@ void QTButtonBar::BuildRecentTabsMenu(HMENU menu) {
 }
 
 void QTButtonBar::BuildRecentFilesMenu(HMENU menu) {
-    ::AppendMenuW(menu, MF_GRAYED | MF_STRING, 0, L"Recent files are not yet available");
+    auto files = qttabbar::RecentFileHistoryNative::Instance().GetRecentFiles();
+    if(files.empty()) {
+        ::AppendMenuW(menu, MF_GRAYED | MF_STRING, 0, L"(no recent files)");
+        return;
+    }
+
+    for(size_t index = 0; index < files.size(); ++index) {
+        UINT id = 0;
+        if(!TryAllocateDynamicCommand(id)) {
+            AppendOverflowPlaceholder(menu);
+            return;
+        }
+        std::wstring text = ExtractLeafName(files[index]);
+        if(text.empty()) {
+            text = files[index];
+        }
+        ::AppendMenuW(menu, MF_STRING, id, text.c_str());
+        m_menuHandlers[id] = [file = files[index]]() {
+            ::ShellExecuteW(nullptr, L"open", file.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            qttabbar::RecentFileHistoryNative::Instance().Add(file);
+        };
+    }
+
+    UINT clearId = 0;
+    if(TryAllocateDynamicCommand(clearId)) {
+        ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        ::AppendMenuW(menu, MF_STRING, clearId, L"Clear recent files");
+        m_menuHandlers[clearId] = []() { qttabbar::RecentFileHistoryNative::Instance().Clear(); };
+    }
+}
+
+void QTButtonBar::BuildApplicationsMenu(HMENU menu) {
+    auto nodes = qttabbar::AppsManagerNative::Instance().GetRootNodes();
+    if(nodes.empty()) {
+        ::AppendMenuW(menu, MF_GRAYED | MF_STRING, 0, L"(no applications)");
+        return;
+    }
+
+    auto* tabBar = InstanceManagerNative::Instance().FindTabBar(m_explorerHwnd);
+    std::wstring currentPath;
+    if(tabBar != nullptr) {
+        currentPath = tabBar->GetCurrentPath();
+    }
+
+    std::function<void(const std::vector<qttabbar::UserAppMenuNodeNative>&, HMENU)> addNodes;
+    addNodes = [this, &addNodes, currentPath](const std::vector<qttabbar::UserAppMenuNodeNative>& entries,
+                                              HMENU parent) {
+        for(const auto& node : entries) {
+            if(node.isFolder) {
+                HMENU sub = ::CreatePopupMenu();
+                if(sub == nullptr) {
+                    continue;
+                }
+                ::AppendMenuW(parent, MF_POPUP | MF_STRING, reinterpret_cast<UINT_PTR>(sub), node.app.name.c_str());
+                addNodes(node.children, sub);
+                if(::GetMenuItemCount(sub) == 0) {
+                    ::AppendMenuW(sub, MF_GRAYED | MF_STRING, 0, L"(empty)");
+                }
+            } else {
+                UINT id = 0;
+                if(!TryAllocateDynamicCommand(id)) {
+                    AppendOverflowPlaceholder(parent);
+                    return;
+                }
+                ::AppendMenuW(parent, MF_STRING, id, node.app.name.c_str());
+                m_menuHandlers[id] = [entry = node.app, hwnd = m_hWnd, currentPath]() {
+                    qttabbar::AppExecutionContextNative context;
+                    context.currentDirectory = currentPath;
+                    context.parentWindow = hwnd;
+                    qttabbar::AppsManagerNative::Instance().Execute(entry, context);
+                };
+            }
+        }
+    };
+
+    addNodes(nodes, menu);
+
+    if(nodes.size() > 1) {
+        HMENU reorder = ::CreatePopupMenu();
+        if(reorder != nullptr) {
+            ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+            for(size_t index = 0; index < nodes.size(); ++index) {
+                if(index > 0) {
+                    UINT upId = 0;
+                    if(TryAllocateDynamicCommand(upId)) {
+                        std::wstring label = L"Move up: " + nodes[index].app.name;
+                        ::AppendMenuW(reorder, MF_STRING, upId, label.c_str());
+                        m_menuHandlers[upId] = [index]() {
+                            qttabbar::AppsManagerNative::Instance().MoveRootNodeUp(index);
+                        };
+                    }
+                }
+                if(index + 1 < nodes.size()) {
+                    UINT downId = 0;
+                    if(TryAllocateDynamicCommand(downId)) {
+                        std::wstring label = L"Move down: " + nodes[index].app.name;
+                        ::AppendMenuW(reorder, MF_STRING, downId, label.c_str());
+                        m_menuHandlers[downId] = [index]() {
+                            qttabbar::AppsManagerNative::Instance().MoveRootNodeDown(index);
+                        };
+                    }
+                }
+            }
+            ::AppendMenuW(menu, MF_POPUP | MF_STRING, reinterpret_cast<UINT_PTR>(reorder), L"Reorder");
+        }
+    }
 }
 
 void QTButtonBar::BuildPluginsMenu(HMENU menu) {
@@ -439,15 +629,95 @@ void QTButtonBar::BuildPluginsMenu(HMENU menu) {
             AppendOverflowPlaceholder(menu);
             return;
         }
-        ::AppendMenuW(menu, MF_STRING, id, metadata.name);
-        m_menuHandlers[id] = [metadata]() {
-            ATLTRACE(L"Plugin '%s' selected from button bar\n", metadata.name);
+        bool enabled = metadata.enabled != FALSE;
+        UINT flags = MF_STRING;
+        if(!enabled) {
+            flags |= MF_GRAYED;
+        }
+        ::AppendMenuW(menu, flags, id, metadata.name);
+        m_menuHandlers[id] = [metadata, enabled, this]() {
+            std::wstring pluginName(metadata.name);
+            if(!enabled) {
+                ::MessageBoxW(m_hWnd, L"Plugin is disabled.", pluginName.c_str(), MB_ICONINFORMATION | MB_OK);
+                return;
+            }
+            std::wstring pluginId(metadata.id);
+            void* instance = nullptr;
+            const PluginClientVTable* vtable = nullptr;
+            HRESULT hr = PluginManagerNative::Instance().CreateInstance(pluginId, &instance, &vtable);
+            if(FAILED(hr) || instance == nullptr) {
+                wchar_t buffer[256] = {};
+                _snwprintf_s(buffer, std::size(buffer), L"Failed to load plugin '%s' (0x%08lX)", pluginName.c_str(), hr);
+                ::MessageBoxW(m_hWnd, buffer, L"QTTabBar", MB_ICONERROR | MB_OK);
+                return;
+            }
+            struct PluginCleanup {
+                void* instance;
+                ~PluginCleanup() {
+                    if(instance) {
+                        PluginManagerNative::Instance().DispatchClose(instance, PluginEndCode::WindowClosed);
+                        PluginManagerNative::Instance().DestroyInstance(instance);
+                    }
+                }
+            } cleanup{instance};
+            PluginManagerNative::Instance().DispatchOpen(instance, nullptr, m_spExplorer);
+            PluginManagerNative::Instance().DispatchMenuClick(instance, PluginMenuType::Bar, pluginName.c_str(), nullptr);
         };
     }
 }
 
 void QTButtonBar::BuildMiscToolsMenu(HMENU menu) {
-    ::AppendMenuW(menu, MF_GRAYED | MF_STRING, 0, L"Misc tools are not yet available");
+    auto* tabBar = InstanceManagerNative::Instance().FindTabBar(m_explorerHwnd);
+    if(tabBar == nullptr) {
+        ::AppendMenuW(menu, MF_GRAYED | MF_STRING, 0, L"Tab bar unavailable");
+        return;
+    }
+
+    std::wstring currentPath = tabBar->GetCurrentPath();
+    std::wstring folderName = ExtractLeafName(currentPath);
+    std::vector<std::wstring> openTabs = tabBar->GetOpenTabs();
+
+    auto appendAction = [this, menu](const std::wstring& label, std::function<void()> action) {
+        UINT id = 0;
+        if(!TryAllocateDynamicCommand(id)) {
+            AppendOverflowPlaceholder(menu);
+            return;
+        }
+        ::AppendMenuW(menu, MF_STRING, id, label.c_str());
+        m_menuHandlers[id] = std::move(action);
+    };
+
+    appendAction(L"Copy current path", [currentPath, this]() {
+        if(currentPath.empty()) {
+            return;
+        }
+        CopyTextToClipboard(m_hWnd, currentPath);
+    });
+
+    appendAction(L"Copy folder name", [folderName, this]() {
+        if(folderName.empty()) {
+            return;
+        }
+        CopyTextToClipboard(m_hWnd, folderName);
+    });
+
+    appendAction(L"Copy all tab paths", [paths = std::move(openTabs), this]() {
+        if(paths.empty()) {
+            return;
+        }
+        std::wstring joined;
+        for(size_t i = 0; i < paths.size(); ++i) {
+            joined.append(paths[i]);
+            if(i + 1 < paths.size()) {
+                joined.append(L"\r\n");
+            }
+        }
+        CopyTextToClipboard(m_hWnd, joined);
+    });
+
+    appendAction(L"Open options", [this]() {
+        InstanceManagerNative::Instance().NotifyButtonCommand(m_explorerHwnd, ID_BUTTONBAR_OPTIONS);
+    });
 }
 
 void QTButtonBar::ExecuteMenuCommand(UINT commandId) {

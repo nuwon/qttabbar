@@ -87,6 +87,12 @@
     <ClInclude Include="AutoLoaderNative.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="AppsManagerNative.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RecentFileHistoryNative.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -117,6 +123,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="NativeExports.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AppsManagerNative.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RecentFileHistoryNative.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="PluginLibrary.cpp">

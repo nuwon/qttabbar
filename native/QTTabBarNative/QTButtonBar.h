@@ -106,6 +106,7 @@ private:
     void BuildGroupsMenu(HMENU menu);
     void BuildRecentTabsMenu(HMENU menu);
     void BuildRecentFilesMenu(HMENU menu);
+    void BuildApplicationsMenu(HMENU menu);
     void BuildPluginsMenu(HMENU menu);
     void BuildMiscToolsMenu(HMENU menu);
     void ExecuteMenuCommand(UINT commandId);
