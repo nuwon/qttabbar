@@ -112,6 +112,29 @@ void InstanceManagerNative::NotifyButtonCommand(HWND explorerHwnd, UINT commandI
     }
 }
 
+size_t InstanceManagerNative::GetTabBarCount() const {
+    std::scoped_lock lock(mutex_);
+    size_t count = 0;
+    for(const auto& [_, entry] : map_) {
+        if(entry.tabBar != nullptr) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+std::vector<QTTabBarClass*> InstanceManagerNative::EnumerateTabBars() const {
+    std::scoped_lock lock(mutex_);
+    std::vector<QTTabBarClass*> result;
+    result.reserve(map_.size());
+    for(const auto& [_, entry] : map_) {
+        if(entry.tabBar != nullptr) {
+            result.push_back(entry.tabBar);
+        }
+    }
+    return result;
+}
+
 void InstanceManagerNative::SetDesktopGroups(std::vector<DesktopGroupInfo> groups) {
     std::vector<QTDesktopTool*> listeners;
     {

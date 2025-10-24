@@ -1,4 +1,5 @@
 #include "Config.h"
+#include "HookManagerNative.h"
 
 #include <Windows.h>
 #include <ShlObj.h>
@@ -1175,6 +1176,7 @@ void WriteConfigToRegistry(const ConfigData& config, bool desktopOnly) {
 
 void UpdateConfigSideEffects(ConfigData& config, bool broadcastChanges) {
     ApplyConfigValidation(config);
+    hooks::HookManagerNative::Instance().ReloadConfiguration(config);
     if(!broadcastChanges) {
         return;
     }

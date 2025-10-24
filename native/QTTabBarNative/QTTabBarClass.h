@@ -2,6 +2,7 @@
 
 #include "QTTabBarNativeGuids.h"
 #include "resource.h"
+#include "HookMessages.h"
 
 class TabBarHost;
 
@@ -72,6 +73,7 @@ public:
         MESSAGE_HANDLER(WM_COMMAND, OnCommand)
         MESSAGE_HANDLER(WM_SETFOCUS, OnSetFocus)
         MESSAGE_HANDLER(WM_KILLFOCUS, OnKillFocus)
+        MESSAGE_HANDLER(qttabbar::hooks::WM_APP_CAPTURE_NEW_WINDOW, OnCaptureNewWindow)
         MESSAGE_HANDLER(WM_APP_UNSUBCLASS, OnUnsetRebarMonitor)
         CHAIN_MSG_MAP(CWindowImpl<QTTabBarClass, CWindow, CControlWinTraits>)
     END_MSG_MAP()
@@ -119,12 +121,14 @@ public:
     LRESULT OnSetFocus(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnKillFocus(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnUnsetRebarMonitor(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnCaptureNewWindow(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     void HandleButtonCommand(UINT commandId);
     std::vector<std::wstring> GetOpenTabs() const;
     std::vector<std::wstring> GetClosedTabHistory() const;
     void ActivateTabByIndex(std::size_t index);
     void RestoreClosedTabByIndex(std::size_t index);
+    HWND GetWindowHandle() const noexcept { return m_hWnd; }
 
 private:
     HRESULT EnsureWindow();

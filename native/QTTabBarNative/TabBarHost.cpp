@@ -697,6 +697,15 @@ void TabBarHost::NavigateForward() {
     }
 }
 
+bool TabBarHost::OpenCapturedWindow(const std::wstring& path) {
+    if(path.empty()) {
+        return false;
+    }
+    AddTab(path, true, true);
+    LogTabsState(L"OpenCapturedWindow");
+    return true;
+}
+
 void TabBarHost::TrimClosedHistory() {
     while(m_closedHistory.size() > kMaxClosedHistory) {
         m_closedHistory.pop_back();

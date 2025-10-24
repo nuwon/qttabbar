@@ -50,6 +50,7 @@ public:
     void GoUpOneLevel();
     void NavigateBack();
     void NavigateForward();
+    bool OpenCapturedWindow(const std::wstring& path);
     std::wstring GetCurrentPath() const { return m_currentPath; }
 
     BEGIN_MSG_MAP(TabBarHost)

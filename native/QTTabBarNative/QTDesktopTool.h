@@ -2,6 +2,7 @@
 
 #include "QTTabBarNativeGuids.h"
 #include "resource.h"
+#include "HookManagerNative.h"
 
 #include <array>
 #include <atomic>
@@ -32,6 +33,7 @@ class ATL_NO_VTABLE QTDesktopTool final
     , public IPersistStream
     , public IOleWindow
     , public CWindowImpl<QTDesktopTool, CWindow, CControlWinTraits>
+    , public qttabbar::hooks::IHookEventSink
 {
 public:
     QTDesktopTool() noexcept;
@@ -185,11 +187,10 @@ private:
     QTTabBarClass* ResolveTabBar() const;
 
     void InitializeHookLibrary();
-    std::wstring ResolveHookLibraryPath() const;
-    static void __stdcall ForwardHookResult(int hookId, int retcode, void* context);
-    static BOOL __stdcall ForwardHookNewWindow(PCIDLIST_ABSOLUTE pidl, void* context);
     void HandleHookResult(int hookId, int retcode);
     BOOL HandleHookNewWindow(PCIDLIST_ABSOLUTE pidl);
+    void OnHookResult(int hookId, int retcode) override;
+    BOOL OnHookNewWindow(PCIDLIST_ABSOLUTE pidl) override;
 
     CComPtr<IInputObjectSite> m_spInputObjectSite;
     CComPtr<IServiceProvider> m_spServiceProvider;

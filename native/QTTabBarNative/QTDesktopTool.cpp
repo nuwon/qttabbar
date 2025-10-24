@@ -7,7 +7,6 @@
 #include "InstanceManagerNative.h"
 #include "QTTabBarClass.h"
 
-#include <filesystem>
 #include <atlstr.h>
 #include <shellapi.h>
 #include <shlwapi.h>
@@ -343,7 +342,7 @@ void QTDesktopTool::DesktopThreadMain() {
         ::WaitForSingleObject(m_exitEvent, INFINITE);
     }
     if(m_hookInitialized.load()) {
-        qttabbar::hooks::HookLibraryBridge::Instance().Shutdown();
+        qttabbar::hooks::HookManagerNative::Instance().UnregisterSink(this);
         m_hookInitialized.store(false);
     }
     CoUninitialize();
@@ -938,40 +937,8 @@ void QTDesktopTool::InitializeHookLibrary() {
     if(m_hookInitialized.load()) {
         return;
     }
-    qttabbar::hooks::HookCallbacks callbacks{};
-    callbacks.hookResult = &QTDesktopTool::ForwardHookResult;
-    callbacks.newWindow = &QTDesktopTool::ForwardHookNewWindow;
-    callbacks.context = this;
-    auto path = ResolveHookLibraryPath();
-    if(path.empty()) {
-        return;
-    }
-    if(SUCCEEDED(qttabbar::hooks::HookLibraryBridge::Instance().Initialize(callbacks, path.c_str()))) {
-        m_hookInitialized.store(true);
-    }
-}
-
-std::wstring QTDesktopTool::ResolveHookLibraryPath() const {
-    wchar_t buffer[MAX_PATH] = {};
-    if(::GetModuleFileNameW(_AtlBaseModule.GetModuleInstance(), buffer, _countof(buffer)) == 0) {
-        return {};
-    }
-    std::filesystem::path path(buffer);
-    path.replace_filename(L"QTHookLib.dll");
-    return path.wstring();
-}
-
-void __stdcall QTDesktopTool::ForwardHookResult(int hookId, int retcode, void* context) {
-    if(auto* self = static_cast<QTDesktopTool*>(context)) {
-        self->HandleHookResult(hookId, retcode);
-    }
-}
-
-BOOL __stdcall QTDesktopTool::ForwardHookNewWindow(PCIDLIST_ABSOLUTE pidl, void* context) {
-    if(auto* self = static_cast<QTDesktopTool*>(context)) {
-        return self->HandleHookNewWindow(pidl);
-    }
-    return FALSE;
+    qttabbar::hooks::HookManagerNative::Instance().RegisterSink(this);
+    m_hookInitialized.store(true);
 }
 
 void QTDesktopTool::HandleHookResult(int /*hookId*/, int /*retcode*/) {
@@ -981,6 +948,14 @@ void QTDesktopTool::HandleHookResult(int /*hookId*/, int /*retcode*/) {
 BOOL QTDesktopTool::HandleHookNewWindow(PCIDLIST_ABSOLUTE /*pidl*/) {
     ScheduleMenuRebuild();
     return TRUE;
+}
+
+void QTDesktopTool::OnHookResult(int hookId, int retcode) {
+    HandleHookResult(hookId, retcode);
+}
+
+BOOL QTDesktopTool::OnHookNewWindow(PCIDLIST_ABSOLUTE pidl) {
+    return HandleHookNewWindow(pidl);
 }
 
 *** End of File ***

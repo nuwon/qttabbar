@@ -182,6 +182,8 @@
     <ClInclude Include="ConfigTypes.h" />
     <ClInclude Include="InstanceManagerNative.h" />
     <ClInclude Include="HookLibraryBridge.h" />
+    <ClInclude Include="HookManagerNative.h" />
+    <ClInclude Include="HookMessages.h" />
     <ClInclude Include="OptionsDialog.h" />
     <ClInclude Include="PluginContracts.h" />
     <ClInclude Include="PluginLibrary.h" />
@@ -208,6 +210,7 @@
     </ClCompile>
     <ClCompile Include="Config.cpp" />
     <ClCompile Include="HookLibraryBridge.cpp" />
+    <ClCompile Include="HookManagerNative.cpp" />
     <ClCompile Include="InstanceManagerNative.cpp" />
     <ClCompile Include="NativeExports.cpp" />
     <ClCompile Include="OptionsDialog.cpp" />
