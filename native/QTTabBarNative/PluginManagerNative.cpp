@@ -6,8 +6,8 @@
 
 #include <algorithm>
 #include <cwchar>
+#include <filesystem>
 #include <functional>
-#include <set>
 #include <string_view>
 
 #include "PluginContracts.h"
@@ -20,6 +20,10 @@ namespace {
 constexpr wchar_t kRegistryRoot[] = L"Software\\QTTabBar";
 constexpr wchar_t kPluginPathsKey[] = L"Plugins\\Paths";
 constexpr wchar_t kPluginEnabledKey[] = L"Plugins\\Enabled";
+
+bool CaseInsensitiveEquals(const std::wstring& lhs, const std::wstring& rhs) {
+    return _wcsicmp(lhs.c_str(), rhs.c_str()) == 0;
+}
 
 std::wstring ReadRegistryString(HKEY key, const wchar_t* name) {
     DWORD type = 0;
@@ -45,6 +49,15 @@ void WriteRegistryString(HKEY key, const wchar_t* name, const std::wstring& valu
     RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(value.c_str()), size);
 }
 
+void ClearRegistryValues(HKEY key) {
+    wchar_t name[260];
+    DWORD nameLength = ARRAYSIZE(name);
+    while (RegEnumValueW(key, 0, name, &nameLength, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
+        RegDeleteValueW(key, name);
+        nameLength = ARRAYSIZE(name);
+    }
+}
+
 std::vector<std::wstring> ReadRegistryStrings(HKEY key) {
     DWORD index = 0;
     std::vector<std::wstring> values;
@@ -66,6 +79,48 @@ void WriteRegistryStrings(HKEY key, const std::vector<std::wstring>& values) {
     }
 }
 
+std::vector<std::wstring> DiscoverProgramDataPlugins() {
+    std::vector<std::wstring> results;
+    wchar_t buffer[MAX_PATH];
+    DWORD length = GetEnvironmentVariableW(L"ProgramData", buffer, ARRAYSIZE(buffer));
+    if (length == 0 || length >= ARRAYSIZE(buffer)) {
+        return results;
+    }
+
+    std::filesystem::path base(std::wstring(buffer, length));
+    base /= L"QTTabBar";
+
+    std::error_code ec;
+    if (!std::filesystem::exists(base, ec) || !std::filesystem::is_directory(base, ec)) {
+        return results;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(base, ec)) {
+        if (ec) break;
+        if (!entry.is_regular_file(ec)) {
+            continue;
+        }
+        std::filesystem::path path = entry.path();
+        if (_wcsicmp(path.extension().c_str(), L".dll") != 0) {
+            continue;
+        }
+        results.push_back(path.wstring());
+    }
+
+    std::sort(results.begin(), results.end(), [](const std::wstring& lhs, const std::wstring& rhs) {
+        return _wcsicmp(lhs.c_str(), rhs.c_str()) < 0;
+    });
+
+    results.erase(std::unique(results.begin(), results.end(), CaseInsensitiveEquals), results.end());
+    return results;
+}
+
+bool ContainsPath(const std::vector<std::wstring>& list, const std::wstring& candidate) {
+    return std::any_of(list.begin(), list.end(), [&](const std::wstring& value) {
+        return CaseInsensitiveEquals(value, candidate);
+    });
+}
+
 }  // namespace
 
 PluginManagerNative& PluginManagerNative::Instance() {
@@ -77,13 +132,21 @@ PluginManagerNative::PluginManagerNative() = default;
 
 void PluginManagerNative::Refresh() {
     std::scoped_lock lock(mutex_);
+    DestroyAllInstancesLocked();
     LoadFromRegistry();
     LoadEnabledList();
     initialized_ = true;
+    if (pluginPathsDirty_) {
+        PersistPluginPaths();
+    }
+    if (enabledListDirty_) {
+        PersistEnabledList();
+    }
 }
 
 std::vector<PluginMetadataNative> PluginManagerNative::EnumerateMetadata() const {
     std::scoped_lock lock(mutex_);
+    EnsureInitializedLocked();
     std::vector<PluginMetadataNative> metadata;
     metadata.reserve(libraries_.size());
     for (const auto& lib : libraries_) {
@@ -94,60 +157,91 @@ std::vector<PluginMetadataNative> PluginManagerNative::EnumerateMetadata() const
 
 bool PluginManagerNative::SetEnabled(const std::wstring& pluginId, bool enabled) {
     std::scoped_lock lock(mutex_);
+    EnsureInitializedLocked();
     PluginLibrary* library = FindLibraryById(pluginId);
     if (library == nullptr) {
         return false;
     }
     library->SetEnabled(enabled);
-    auto it = std::find(enabledIds_.begin(), enabledIds_.end(), pluginId);
+    auto it = std::find_if(enabledIds_.begin(), enabledIds_.end(), [&](const std::wstring& id) {
+        return CaseInsensitiveEquals(id, pluginId);
+    });
     if (enabled) {
         if (it == enabledIds_.end()) {
             enabledIds_.push_back(pluginId);
+            enabledListDirty_ = true;
         }
     } else {
         if (it != enabledIds_.end()) {
             enabledIds_.erase(it);
+            enabledListDirty_ = true;
         }
     }
-    PersistEnabledList();
+    if (enabledListDirty_) {
+        PersistEnabledList();
+    }
     return true;
 }
 
 bool PluginManagerNative::IsEnabled(const std::wstring& pluginId) const {
     std::scoped_lock lock(mutex_);
+    EnsureInitializedLocked();
     return std::any_of(enabledIds_.begin(), enabledIds_.end(), [&](const std::wstring& id) {
-        return _wcsicmp(id.c_str(), pluginId.c_str()) == 0;
+        return CaseInsensitiveEquals(id, pluginId);
     });
 }
 
 void PluginManagerNative::LoadFromRegistry() {
     libraries_.clear();
+    pluginPaths_.clear();
+    pluginPathsDirty_ = false;
 
     HKEY root = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryRoot, 0, KEY_READ, &root) != ERROR_SUCCESS) {
-        return;
-    }
-
-    HKEY pathsKey = nullptr;
-    if (RegOpenKeyExW(root, kPluginPathsKey, 0, KEY_READ, &pathsKey) != ERROR_SUCCESS) {
+    std::vector<std::wstring> registryPaths;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryRoot, 0, KEY_READ, &root) == ERROR_SUCCESS) {
+        HKEY pathsKey = nullptr;
+        if (RegOpenKeyExW(root, kPluginPathsKey, 0, KEY_READ, &pathsKey) == ERROR_SUCCESS) {
+            registryPaths = ReadRegistryStrings(pathsKey);
+            RegCloseKey(pathsKey);
+        }
         RegCloseKey(root);
-        return;
     }
 
-    std::vector<std::wstring> paths = ReadRegistryStrings(pathsKey);
-    RegCloseKey(pathsKey);
-    RegCloseKey(root);
+    std::vector<std::wstring> discoveredPaths = DiscoverProgramDataPlugins();
 
-    for (const auto& path : paths) {
+    for (const auto& path : registryPaths) {
+        if (path.empty()) {
+            continue;
+        }
+        if (!PathFileExistsW(path.c_str())) {
+            pluginPathsDirty_ = true;
+            continue;
+        }
+        if (!ContainsPath(pluginPaths_, path)) {
+            pluginPaths_.push_back(path);
+        }
+    }
+
+    for (const auto& path : discoveredPaths) {
+        if (!ContainsPath(pluginPaths_, path)) {
+            pluginPaths_.push_back(path);
+            pluginPathsDirty_ = true;
+        }
+    }
+
+    for (const auto& path : pluginPaths_) {
         PluginLibrary library(path, false);
         if (library.Load()) {
             libraries_.push_back(std::move(library));
+        } else {
+            pluginPathsDirty_ = true;
         }
     }
 }
 
 void PluginManagerNative::LoadEnabledList() {
     enabledIds_.clear();
+    enabledListDirty_ = false;
 
     HKEY root = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, kRegistryRoot, 0, KEY_READ, &root) != ERROR_SUCCESS) {
@@ -160,13 +254,24 @@ void PluginManagerNative::LoadEnabledList() {
         return;
     }
 
-    enabledIds_ = ReadRegistryStrings(enabledKey);
+    std::vector<std::wstring> ids = ReadRegistryStrings(enabledKey);
     RegCloseKey(enabledKey);
     RegCloseKey(root);
 
+    for (const auto& id : ids) {
+        if (FindLibraryById(id) != nullptr) {
+            enabledIds_.push_back(id);
+        } else {
+            enabledListDirty_ = true;
+        }
+    }
+
     for (auto& library : libraries_) {
         std::wstring id = MakePluginId(library.Metadata());
-        library.SetEnabled(IsEnabled(id));
+        bool enabled = std::any_of(enabledIds_.begin(), enabledIds_.end(), [&](const std::wstring& stored) {
+            return CaseInsensitiveEquals(stored, id);
+        });
+        library.SetEnabled(enabled);
     }
 }
 
@@ -179,30 +284,202 @@ void PluginManagerNative::PersistEnabledList() const {
     HKEY enabledKey = nullptr;
     RegCreateKeyExW(root, kPluginEnabledKey, 0, nullptr, 0, KEY_WRITE, nullptr, &enabledKey, nullptr);
     if (enabledKey != nullptr) {
-        // Clear existing values.
-        DWORD index = 0;
-        wchar_t name[260];
-        DWORD nameLength = ARRAYSIZE(name);
-        while (RegEnumValueW(enabledKey, index, name, &nameLength, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
-            RegDeleteValueW(enabledKey, name);
-            nameLength = ARRAYSIZE(name);
-        }
+        ClearRegistryValues(enabledKey);
         WriteRegistryStrings(enabledKey, enabledIds_);
         RegCloseKey(enabledKey);
     }
     RegCloseKey(root);
+    enabledListDirty_ = false;
+}
+
+void PluginManagerNative::PersistPluginPaths() const {
+    HKEY root = nullptr;
+    RegCreateKeyExW(HKEY_CURRENT_USER, kRegistryRoot, 0, nullptr, 0, KEY_WRITE, nullptr, &root, nullptr);
+    if (root == nullptr) {
+        return;
+    }
+    HKEY pathsKey = nullptr;
+    RegCreateKeyExW(root, kPluginPathsKey, 0, nullptr, 0, KEY_WRITE, nullptr, &pathsKey, nullptr);
+    if (pathsKey != nullptr) {
+        ClearRegistryValues(pathsKey);
+        WriteRegistryStrings(pathsKey, pluginPaths_);
+        RegCloseKey(pathsKey);
+    }
+    RegCloseKey(root);
+    pluginPathsDirty_ = false;
+}
+
+void PluginManagerNative::EnsureInitializedLocked() const {
+    if (initialized_) {
+        return;
+    }
+    auto* self = const_cast<PluginManagerNative*>(this);
+    self->LoadFromRegistry();
+    self->LoadEnabledList();
+    initialized_ = true;
+    if (pluginPathsDirty_) {
+        self->PersistPluginPaths();
+    }
+    if (enabledListDirty_) {
+        self->PersistEnabledList();
+    }
+}
+
+void PluginManagerNative::DestroyAllInstancesLocked() {
+    for (auto& entry : liveInstances_) {
+        if (entry.second.library != nullptr && entry.second.instance != nullptr) {
+            entry.second.library->DestroyInstance(entry.second.instance);
+        }
+    }
+    liveInstances_.clear();
+}
+
+HRESULT PluginManagerNative::CreateInstance(const std::wstring& pluginId, void** instance, const PluginClientVTable** vtable) {
+    if (instance == nullptr || vtable == nullptr) {
+        return E_POINTER;
+    }
+
+    *instance = nullptr;
+    *vtable = nullptr;
+
+    std::scoped_lock lock(mutex_);
+    EnsureInitializedLocked();
+
+    PluginLibrary* library = FindLibraryById(pluginId);
+    if (library == nullptr) {
+        return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+    }
+    if (!library->Metadata().enabled) {
+        return HRESULT_FROM_WIN32(ERROR_ACCESS_DISABLED_BY_POLICY);
+    }
+    if (library->ManagedFallback() || !library->SupportsInstantiation()) {
+        return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+    }
+
+    HRESULT hr = library->CreateInstance(instance, vtable);
+    if (FAILED(hr)) {
+        return hr;
+    }
+
+    InstanceRecord record;
+    record.instance = *instance;
+    record.clientVTable = *vtable;
+    record.library = library;
+    record.pluginId = pluginId;
+    liveInstances_[record.instance] = record;
+    return hr;
+}
+
+void PluginManagerNative::DestroyInstance(void* instance) {
+    if (instance == nullptr) {
+        return;
+    }
+    std::scoped_lock lock(mutex_);
+    auto it = liveInstances_.find(instance);
+    if (it == liveInstances_.end()) {
+        return;
+    }
+    if (it->second.library != nullptr) {
+        it->second.library->DestroyInstance(instance);
+    }
+    liveInstances_.erase(it);
+}
+
+PluginManagerNative::InstanceRecord* PluginManagerNative::FindInstance(void* instance) {
+    auto it = liveInstances_.find(instance);
+    if (it == liveInstances_.end()) {
+        return nullptr;
+    }
+    return &it->second;
+}
+
+const PluginManagerNative::InstanceRecord* PluginManagerNative::FindInstance(void* instance) const {
+    auto it = liveInstances_.find(instance);
+    if (it == liveInstances_.end()) {
+        return nullptr;
+    }
+    return &it->second;
+}
+
+bool PluginManagerNative::DispatchMenuClick(void* instance, PluginMenuType menuType, const wchar_t* menuText, void* tabContext) {
+    std::scoped_lock lock(mutex_);
+    auto* record = FindInstance(instance);
+    if (record == nullptr || record->clientVTable == nullptr || record->clientVTable->OnMenuItemClick == nullptr) {
+        return false;
+    }
+    record->clientVTable->OnMenuItemClick(record->instance, menuType, menuText, tabContext);
+    return true;
+}
+
+bool PluginManagerNative::DispatchOption(void* instance) {
+    std::scoped_lock lock(mutex_);
+    auto* record = FindInstance(instance);
+    if (record == nullptr || record->clientVTable == nullptr || record->clientVTable->OnOption == nullptr) {
+        return false;
+    }
+    record->clientVTable->OnOption(record->instance);
+    return true;
+}
+
+bool PluginManagerNative::DispatchShortcut(void* instance, int index) {
+    std::scoped_lock lock(mutex_);
+    auto* record = FindInstance(instance);
+    if (record == nullptr || record->clientVTable == nullptr || record->clientVTable->OnShortcutKeyPressed == nullptr) {
+        return false;
+    }
+    record->clientVTable->OnShortcutKeyPressed(record->instance, index);
+    return true;
+}
+
+HRESULT PluginManagerNative::DispatchOpen(void* instance, void* pluginServer, void* shellBrowser) {
+    std::scoped_lock lock(mutex_);
+    auto* record = FindInstance(instance);
+    if (record == nullptr || record->clientVTable == nullptr || record->clientVTable->Open == nullptr) {
+        return E_POINTER;
+    }
+    return record->clientVTable->Open(record->instance, pluginServer, shellBrowser);
+}
+
+HRESULT PluginManagerNative::DispatchQueryShortcuts(void* instance, wchar_t*** actions, int* count) {
+    if (actions == nullptr || count == nullptr) {
+        return E_POINTER;
+    }
+    std::scoped_lock lock(mutex_);
+    auto* record = FindInstance(instance);
+    if (record == nullptr || record->clientVTable == nullptr || record->clientVTable->QueryShortcutKeys == nullptr) {
+        return E_POINTER;
+    }
+    return record->clientVTable->QueryShortcutKeys(record->instance, actions, count);
+}
+
+bool PluginManagerNative::DispatchHasOption(void* instance) const {
+    std::scoped_lock lock(mutex_);
+    auto* record = FindInstance(instance);
+    if (record == nullptr || record->clientVTable == nullptr || record->clientVTable->HasOption == nullptr) {
+        return false;
+    }
+    return record->clientVTable->HasOption(record->instance) != FALSE;
+}
+
+void PluginManagerNative::DispatchClose(void* instance, PluginEndCode endCode) {
+    std::scoped_lock lock(mutex_);
+    auto* record = FindInstance(instance);
+    if (record == nullptr || record->clientVTable == nullptr || record->clientVTable->Close == nullptr) {
+        return;
+    }
+    record->clientVTable->Close(record->instance, endCode);
 }
 
 PluginLibrary* PluginManagerNative::FindLibraryById(const std::wstring& pluginId) {
     auto it = std::find_if(libraries_.begin(), libraries_.end(), [&](PluginLibrary& library) {
-        return _wcsicmp(MakePluginId(library.Metadata()).c_str(), pluginId.c_str()) == 0;
+        return CaseInsensitiveEquals(MakePluginId(library.Metadata()), pluginId);
     });
     return it != libraries_.end() ? &(*it) : nullptr;
 }
 
 const PluginLibrary* PluginManagerNative::FindLibraryById(const std::wstring& pluginId) const {
     auto it = std::find_if(libraries_.begin(), libraries_.end(), [&](const PluginLibrary& library) {
-        return _wcsicmp(MakePluginId(library.Metadata()).c_str(), pluginId.c_str()) == 0;
+        return CaseInsensitiveEquals(MakePluginId(library.Metadata()), pluginId);
     });
     return it != libraries_.end() ? &(*it) : nullptr;
 }
