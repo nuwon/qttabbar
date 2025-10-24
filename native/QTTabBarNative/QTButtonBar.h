@@ -110,6 +110,8 @@ private:
     void BuildMiscToolsMenu(HMENU menu);
     void ExecuteMenuCommand(UINT commandId);
     void ClearMenuHandlers();
+    bool TryAllocateDynamicCommand(UINT& commandId);
+    void AppendOverflowPlaceholder(HMENU menu) const;
 
     HWND ExplorerWindowFromBrowser() const;
     void RegisterWithInstanceManager();

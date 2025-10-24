@@ -78,6 +78,8 @@ std::size_t NativeTabControl::AddTab(const std::wstring& path, bool makeActive, 
         TabItem item;
         item.path = normalized;
         item.title = ExtractTitle(normalized);
+        item.alias.clear();
+        item.locked = false;
         EnsureIcon(item);
         m_tabs.push_back(std::move(item));
         it = std::prev(m_tabs.end());
@@ -129,6 +131,9 @@ std::optional<std::wstring> NativeTabControl::CloseTab(std::size_t index) {
     if(index >= m_tabs.size()) {
         return std::nullopt;
     }
+    if(m_tabs[index].locked) {
+        return std::nullopt;
+    }
     std::wstring path = m_tabs[index].path;
     DestroyIcon(m_tabs[index]);
     m_tabs.erase(m_tabs.begin() + static_cast<std::ptrdiff_t>(index));
@@ -150,20 +155,18 @@ std::optional<std::wstring> NativeTabControl::CloseActiveTab() {
     return CloseTab(m_activeIndex);
 }
 
-void NativeTabControl::CloseAllExcept(std::size_t index, std::deque<std::wstring>& closedHistory) {
+std::vector<std::wstring> NativeTabControl::CloseAllExcept(std::size_t index) {
+    std::vector<std::wstring> closed;
     if(index >= m_tabs.size()) {
-        return;
+        return closed;
     }
     std::wstring activePath = m_tabs[index].path;
-    for(std::size_t i = 0; i < m_tabs.size();) {
-        if(i == index) {
-            ++i;
+    for(std::size_t i = m_tabs.size(); i-- > 0;) {
+        if(i == index || m_tabs[i].locked) {
             continue;
         }
-        if(auto closed = CloseTab(i)) {
-            closedHistory.push_front(*closed);
-        } else {
-            ++i;
+        if(auto closedPath = CloseTab(i)) {
+            closed.push_back(*closedPath);
         }
     }
     auto it = std::find_if(m_tabs.begin(), m_tabs.end(), [&](const TabItem& tab) {
@@ -175,19 +178,21 @@ void NativeTabControl::CloseAllExcept(std::size_t index, std::deque<std::wstring
             m_tabs[i].active = (i == m_activeIndex);
         }
     }
+    return closed;
 }
 
-void NativeTabControl::CloseTabsToLeft(std::size_t index, std::deque<std::wstring>& closedHistory) {
+std::vector<std::wstring> NativeTabControl::CloseTabsToLeft(std::size_t index) {
+    std::vector<std::wstring> closed;
     if(index >= m_tabs.size()) {
-        return;
+        return closed;
     }
     std::wstring activePath = m_tabs[index].path;
-    for(std::size_t i = 0; i < index;) {
-        if(auto closed = CloseTab(0)) {
-            closedHistory.push_front(*closed);
-            --index;
-        } else {
-            ++i;
+    for(std::size_t i = index; i-- > 0;) {
+        if(m_tabs[i].locked) {
+            continue;
+        }
+        if(auto closedPath = CloseTab(i)) {
+            closed.push_back(*closedPath);
         }
     }
     auto it = std::find_if(m_tabs.begin(), m_tabs.end(), [&](const TabItem& tab) {
@@ -199,16 +204,21 @@ void NativeTabControl::CloseTabsToLeft(std::size_t index, std::deque<std::wstrin
             m_tabs[i].active = (i == m_activeIndex);
         }
     }
+    return closed;
 }
 
-void NativeTabControl::CloseTabsToRight(std::size_t index, std::deque<std::wstring>& closedHistory) {
+std::vector<std::wstring> NativeTabControl::CloseTabsToRight(std::size_t index) {
+    std::vector<std::wstring> closed;
     if(index >= m_tabs.size()) {
-        return;
+        return closed;
     }
     std::wstring activePath = m_tabs[index].path;
-    while(m_tabs.size() > index + 1) {
-        if(auto closed = CloseTab(index + 1)) {
-            closedHistory.push_front(*closed);
+    for(std::size_t i = m_tabs.size(); i-- > index + 1;) {
+        if(m_tabs[i].locked) {
+            continue;
+        }
+        if(auto closedPath = CloseTab(i)) {
+            closed.push_back(*closedPath);
         }
     }
     auto it = std::find_if(m_tabs.begin(), m_tabs.end(), [&](const TabItem& tab) {
@@ -220,6 +230,7 @@ void NativeTabControl::CloseTabsToRight(std::size_t index, std::deque<std::wstri
             m_tabs[i].active = (i == m_activeIndex);
         }
     }
+    return closed;
 }
 
 std::optional<std::wstring> NativeTabControl::GetActivePath() const {
@@ -240,6 +251,89 @@ std::vector<std::wstring> NativeTabControl::GetTabPaths() const {
         paths.push_back(tab.path);
     }
     return paths;
+}
+
+std::wstring NativeTabControl::GetPath(std::size_t index) const {
+    if(index >= m_tabs.size()) {
+        return {};
+    }
+    return m_tabs[index].path;
+}
+
+bool NativeTabControl::IsLocked(std::size_t index) const {
+    if(index >= m_tabs.size()) {
+        return false;
+    }
+    return m_tabs[index].locked;
+}
+
+bool NativeTabControl::CanCloseTab(std::size_t index) const {
+    if(index >= m_tabs.size()) {
+        return false;
+    }
+    return !m_tabs[index].locked;
+}
+
+bool NativeTabControl::HasClosableTabsToLeft(std::size_t index) const {
+    if(m_tabs.empty() || index == 0 || index > m_tabs.size()) {
+        return false;
+    }
+    if(index >= m_tabs.size()) {
+        index = m_tabs.size() - 1;
+    }
+    for(std::size_t i = index; i-- > 0;) {
+        if(!m_tabs[i].locked) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool NativeTabControl::HasClosableTabsToRight(std::size_t index) const {
+    if(index >= m_tabs.size()) {
+        return false;
+    }
+    for(std::size_t i = index + 1; i < m_tabs.size(); ++i) {
+        if(!m_tabs[i].locked) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool NativeTabControl::HasClosableOtherTabs(std::size_t index) const {
+    if(index >= m_tabs.size()) {
+        return false;
+    }
+    for(std::size_t i = 0; i < m_tabs.size(); ++i) {
+        if(i != index && !m_tabs[i].locked) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void NativeTabControl::SetLocked(std::size_t index, bool locked) {
+    if(index >= m_tabs.size()) {
+        return;
+    }
+    if(m_tabs[index].locked == locked) {
+        return;
+    }
+    m_tabs[index].locked = locked;
+    ::InvalidateRect(m_hWnd, &m_tabs[index].metrics.bounds, FALSE);
+}
+
+void NativeTabControl::SetAlias(std::size_t index, const std::wstring& alias) {
+    if(index >= m_tabs.size()) {
+        return;
+    }
+    if(m_tabs[index].alias == alias) {
+        return;
+    }
+    m_tabs[index].alias = alias;
+    LayoutTabs();
+    ::InvalidateRect(m_hWnd, nullptr, FALSE);
 }
 
 void NativeTabControl::ApplyConfiguration(const ConfigData& config) {
@@ -496,7 +590,8 @@ void NativeTabControl::LayoutTabs() {
 
     for(std::size_t i = 0; i < m_tabs.size(); ++i) {
         TabItem& tab = m_tabs[i];
-        SIZE textSize = MeasureTitle(tab.title);
+        const std::wstring& display = tab.alias.empty() ? tab.title : tab.alias;
+        SIZE textSize = MeasureTitle(display);
         int width = textSize.cx + m_horizontalPadding;
         if(m_config.tabs.showFolderIcon) {
             width += m_iconSize + 4;
@@ -582,18 +677,19 @@ void NativeTabControl::DrawTab(HDC hdc, const TabItem& tab, bool hot) const {
         ::DrawIconEx(hdc, textRc.left, iconY, tab.icon, m_iconSize, m_iconSize, 0, nullptr, DI_NORMAL);
         textRc.left += m_iconSize + 4;
     }
-    if(m_config.tabs.showCloseButtons) {
+    if(m_config.tabs.showCloseButtons && !tab.locked) {
         textRc.right = tab.metrics.closeButton.left - 4;
     } else {
         textRc.right -= 8;
     }
 
-    ::DrawTextW(hdc, tab.title.c_str(), static_cast<int>(tab.title.size()), &textRc,
+    const std::wstring& display = tab.alias.empty() ? tab.title : tab.alias;
+    ::DrawTextW(hdc, display.c_str(), static_cast<int>(display.size()), &textRc,
                 DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
 
     ::SelectObject(hdc, oldFont);
 
-    if(m_config.tabs.showCloseButtons) {
+    if(m_config.tabs.showCloseButtons && !tab.locked) {
         bool showButton = !m_config.tabs.closeBtnsOnHover || hot || tab.active;
         if(showButton) {
             DrawCloseButton(hdc, tab.metrics.closeButton, tab.closeHovered, tab.closePressed);
@@ -694,6 +790,9 @@ std::optional<std::size_t> NativeTabControl::HitTestTab(POINT clientPt) const {
 }
 
 bool NativeTabControl::HitTestClose(const TabItem& tab, POINT clientPt) const {
+    if(tab.locked) {
+        return false;
+    }
     return ::PtInRect(&tab.metrics.closeButton, clientPt) != FALSE;
 }
 

@@ -9,6 +9,7 @@
 #include "Config.h"
 #include "InstanceManagerNative.h"
 #include "PluginManagerNative.h"
+#include "GroupsManagerNative.h"
 #include "QTTabBarClass.h"
 
 using qttabbar::ConfigData;
@@ -344,9 +345,10 @@ void QTButtonBar::BuildNavigationMenu(HMENU menu) {
     }
 
     for(size_t index = 0; index < paths.size(); ++index) {
-        UINT id = m_nextDynamicCommand++;
-        if(m_nextDynamicCommand > kButtonbarDynamicLast) {
-            m_nextDynamicCommand = kButtonbarDynamicFirst;
+        UINT id = 0;
+        if(!TryAllocateDynamicCommand(id)) {
+            AppendOverflowPlaceholder(menu);
+            return;
         }
         std::wstring text = ExtractLeafName(paths[index]);
         if(text.empty()) {
@@ -358,7 +360,38 @@ void QTButtonBar::BuildNavigationMenu(HMENU menu) {
 }
 
 void QTButtonBar::BuildGroupsMenu(HMENU menu) {
-    ::AppendMenuW(menu, MF_GRAYED | MF_STRING, 0, L"Groups are not yet available");
+    auto loadString = [] (UINT id, const wchar_t* fallback) {
+        wchar_t buffer[128] = {};
+        HINSTANCE instance = _AtlBaseModule.GetResourceInstance();
+        int length = ::LoadStringW(instance, id, buffer, static_cast<int>(_countof(buffer)));
+        if(length > 0) {
+            return std::wstring(buffer, length);
+        }
+        return std::wstring(fallback);
+    };
+
+    auto groups = qttabbar::GroupsManagerNative::Instance().GetGroups();
+    if(groups.empty()) {
+        const std::wstring noGroups = loadString(IDS_CONTEXT_MENU_NO_GROUPS, L"(no groups)");
+        ::AppendMenuW(menu, MF_GRAYED | MF_STRING, 0, noGroups.c_str());
+        return;
+    }
+
+    auto* tabBar = InstanceManagerNative::Instance().FindTabBar(m_explorerHwnd);
+    if(tabBar == nullptr) {
+        ::AppendMenuW(menu, MF_GRAYED | MF_STRING, 0, L"No tab bar available");
+        return;
+    }
+
+    for(std::size_t index = 0; index < groups.size(); ++index) {
+        UINT id = 0;
+        if(!TryAllocateDynamicCommand(id)) {
+            AppendOverflowPlaceholder(menu);
+            return;
+        }
+        ::AppendMenuW(menu, MF_STRING, id, groups[index].name.c_str());
+        m_menuHandlers[id] = [tabBar, index]() { tabBar->OpenGroupByIndex(index); };
+    }
 }
 
 void QTButtonBar::BuildRecentTabsMenu(HMENU menu) {
@@ -375,9 +408,10 @@ void QTButtonBar::BuildRecentTabsMenu(HMENU menu) {
     }
 
     for(size_t index = 0; index < history.size(); ++index) {
-        UINT id = m_nextDynamicCommand++;
-        if(m_nextDynamicCommand > kButtonbarDynamicLast) {
-            m_nextDynamicCommand = kButtonbarDynamicFirst;
+        UINT id = 0;
+        if(!TryAllocateDynamicCommand(id)) {
+            AppendOverflowPlaceholder(menu);
+            return;
         }
         std::wstring text = ExtractLeafName(history[index]);
         if(text.empty()) {
@@ -400,9 +434,10 @@ void QTButtonBar::BuildPluginsMenu(HMENU menu) {
     }
 
     for(const auto& metadata : plugins) {
-        UINT id = m_nextDynamicCommand++;
-        if(m_nextDynamicCommand > kButtonbarDynamicLast) {
-            m_nextDynamicCommand = kButtonbarDynamicFirst;
+        UINT id = 0;
+        if(!TryAllocateDynamicCommand(id)) {
+            AppendOverflowPlaceholder(menu);
+            return;
         }
         ::AppendMenuW(menu, MF_STRING, id, metadata.name);
         m_menuHandlers[id] = [metadata]() {
@@ -417,6 +452,47 @@ void QTButtonBar::BuildMiscToolsMenu(HMENU menu) {
 
 void QTButtonBar::ExecuteMenuCommand(UINT commandId) {
     HandleButtonCommand(commandId);
+}
+
+bool QTButtonBar::TryAllocateDynamicCommand(UINT& commandId) {
+    constexpr UINT kRangeSize = kButtonbarDynamicLast - kButtonbarDynamicFirst + 1;
+    if(m_menuHandlers.size() >= static_cast<size_t>(kRangeSize)) {
+        ATLTRACE(L"QTButtonBar::TryAllocateDynamicCommand exhausted command range\n");
+        return false;
+    }
+
+    UINT candidate = m_nextDynamicCommand;
+    for(UINT attempts = 0; attempts < kRangeSize; ++attempts) {
+        if(candidate > kButtonbarDynamicLast) {
+            candidate = kButtonbarDynamicFirst;
+        }
+        if(m_menuHandlers.find(candidate) == m_menuHandlers.end()) {
+            commandId = candidate;
+            candidate++;
+            if(candidate > kButtonbarDynamicLast) {
+                candidate = kButtonbarDynamicFirst;
+            }
+            m_nextDynamicCommand = candidate;
+            return true;
+        }
+        candidate++;
+    }
+
+    ATLTRACE(L"QTButtonBar::TryAllocateDynamicCommand failed to find available id\n");
+    return false;
+}
+
+void QTButtonBar::AppendOverflowPlaceholder(HMENU menu) const {
+    if(menu == nullptr) {
+        return;
+    }
+    wchar_t buffer[128] = {};
+    HINSTANCE instance = _AtlBaseModule.GetResourceInstance();
+    int length = ::LoadStringW(instance, IDS_BUTTONBAR_MENU_OVERFLOW, buffer, static_cast<int>(_countof(buffer)));
+    if(length <= 0) {
+        ::StringCchCopyW(buffer, _countof(buffer), L"(too many items)");
+    }
+    ::AppendMenuW(menu, MF_GRAYED | MF_STRING, 0, buffer);
 }
 
 void QTButtonBar::ClearMenuHandlers() {
