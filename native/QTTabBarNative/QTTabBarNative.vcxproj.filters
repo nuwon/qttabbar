@@ -51,6 +51,12 @@
     <ClInclude Include="HookLibraryBridge.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="HookManagerNative.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HookMessages.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="PluginContracts.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -96,6 +102,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="HookLibraryBridge.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HookManagerNative.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="NativeExports.cpp">

@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "QTTabBarClass.h"
+#include "HookManagerNative.h"
+#include "HookMessages.h"
 #include "OptionsDialog.h"
 #include "TabBarHost.h"
 
@@ -383,6 +385,20 @@ LRESULT QTTabBarClass::OnUnsetRebarMonitor(UINT /*uMsg*/, WPARAM /*wParam*/, LPA
     return 0;
 }
 
+LRESULT QTTabBarClass::OnCaptureNewWindow(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& bHandled) {
+    bHandled = TRUE;
+    auto* request = reinterpret_cast<qttabbar::hooks::CaptureNewWindowRequest*>(wParam);
+    if(request == nullptr || request->path == nullptr) {
+        return FALSE;
+    }
+    bool handled = false;
+    if(m_tabHost) {
+        handled = m_tabHost->OpenCapturedWindow(std::wstring(request->path));
+    }
+    request->handled = handled ? TRUE : FALSE;
+    return handled ? TRUE : FALSE;
+}
+
 IFACEMETHODIMP QTTabBarClass::GetWindow(HWND* phwnd) {
     if(phwnd == nullptr) {
         return E_POINTER;
@@ -626,6 +642,7 @@ void QTTabBarClass::RestoreClosedTabByIndex(std::size_t index) {
 IFACEMETHODIMP QTTabBarClass::SetSite(IUnknown* pUnkSite) {
     if(pUnkSite == nullptr) {
         InstanceManagerNative::Instance().UnregisterTabBar(this);
+        qttabbar::hooks::HookManagerNative::Instance().OnTabBarSiteCleared(this);
         m_spInputObjectSite.Release();
         m_spServiceProvider.Release();
         m_spExplorer.Release();
@@ -666,6 +683,8 @@ IFACEMETHODIMP QTTabBarClass::SetSite(IUnknown* pUnkSite) {
             InstanceManagerNative::Instance().RegisterTabBar(m_explorerHwnd, this);
         }
     }
+
+    qttabbar::hooks::HookManagerNative::Instance().OnTabBarSiteAssigned(this);
 
     CComPtr<IOleWindow> spOleWindow;
     if(SUCCEEDED(pUnkSite->QueryInterface(IID_PPV_ARGS(&spOleWindow)))) {

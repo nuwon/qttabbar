@@ -39,6 +39,9 @@ public:
 
     void NotifyButtonCommand(HWND explorerHwnd, UINT commandId);
 
+    size_t GetTabBarCount() const;
+    std::vector<QTTabBarClass*> EnumerateTabBars() const;
+
     void SetDesktopGroups(std::vector<DesktopGroupInfo> groups);
     void SetDesktopApplications(std::vector<DesktopApplicationInfo> applications);
     void SetDesktopRecentFiles(std::vector<std::wstring> files);
