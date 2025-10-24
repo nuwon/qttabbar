@@ -106,5 +106,50 @@ std::optional<PluginLibraryExports> PluginLibrary::Exports() const {
     return exports_;
 }
 
+bool PluginLibrary::SupportsInstantiation() const {
+    return exports_.createInstance != nullptr && exports_.destroyInstance != nullptr;
+}
+
+HRESULT PluginLibrary::CreateInstance(void** instance, const PluginClientVTable** vtable) {
+    if (instance == nullptr || vtable == nullptr) {
+        return E_POINTER;
+    }
+
+    *instance = nullptr;
+    *vtable = nullptr;
+
+    if (module_ == nullptr) {
+        return E_FAIL;
+    }
+
+    if (!SupportsInstantiation()) {
+        return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+    }
+
+    HRESULT hr = exports_.createInstance(instance, vtable);
+    if (FAILED(hr)) {
+        *instance = nullptr;
+        *vtable = nullptr;
+        return hr;
+    }
+
+    if (*instance == nullptr || *vtable == nullptr) {
+        *instance = nullptr;
+        *vtable = nullptr;
+        return E_UNEXPECTED;
+    }
+
+    return hr;
+}
+
+void PluginLibrary::DestroyInstance(void* instance) {
+    if (module_ == nullptr || instance == nullptr) {
+        return;
+    }
+    if (exports_.destroyInstance != nullptr) {
+        exports_.destroyInstance(instance);
+    }
+}
+
 }  // namespace qttabbar::plugins
 

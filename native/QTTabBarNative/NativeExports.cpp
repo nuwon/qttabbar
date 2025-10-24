@@ -44,6 +44,52 @@ __declspec(dllexport) BOOL __stdcall QTTabBarNative_IsPluginEnabled(const wchar_
     return PluginManagerNative::Instance().IsEnabled(pluginId) ? TRUE : FALSE;
 }
 
+__declspec(dllexport) HRESULT __stdcall QTTabBarNative_CreatePluginInstance(const wchar_t* pluginId,
+                                                                            void** instance,
+                                                                            const PluginClientVTable** vtable) {
+    if (pluginId == nullptr || instance == nullptr || vtable == nullptr) {
+        return E_POINTER;
+    }
+    return PluginManagerNative::Instance().CreateInstance(pluginId, instance, vtable);
+}
+
+__declspec(dllexport) void __stdcall QTTabBarNative_DestroyPluginInstance(void* instance) {
+    PluginManagerNative::Instance().DestroyInstance(instance);
+}
+
+__declspec(dllexport) BOOL __stdcall QTTabBarNative_PluginOnMenuClick(void* instance,
+                                                                      PluginMenuType menuType,
+                                                                      const wchar_t* menuText,
+                                                                      void* tabContext) {
+    return PluginManagerNative::Instance().DispatchMenuClick(instance, menuType, menuText, tabContext) ? TRUE : FALSE;
+}
+
+__declspec(dllexport) BOOL __stdcall QTTabBarNative_PluginOnOption(void* instance) {
+    return PluginManagerNative::Instance().DispatchOption(instance) ? TRUE : FALSE;
+}
+
+__declspec(dllexport) BOOL __stdcall QTTabBarNative_PluginOnShortcut(void* instance, int index) {
+    return PluginManagerNative::Instance().DispatchShortcut(instance, index) ? TRUE : FALSE;
+}
+
+__declspec(dllexport) HRESULT __stdcall QTTabBarNative_PluginOpen(void* instance, void* pluginServer, void* shellBrowser) {
+    return PluginManagerNative::Instance().DispatchOpen(instance, pluginServer, shellBrowser);
+}
+
+__declspec(dllexport) HRESULT __stdcall QTTabBarNative_PluginQueryShortcuts(void* instance,
+                                                                            wchar_t*** actions,
+                                                                            int* count) {
+    return PluginManagerNative::Instance().DispatchQueryShortcuts(instance, actions, count);
+}
+
+__declspec(dllexport) BOOL __stdcall QTTabBarNative_PluginHasOption(void* instance) {
+    return PluginManagerNative::Instance().DispatchHasOption(instance) ? TRUE : FALSE;
+}
+
+__declspec(dllexport) void __stdcall QTTabBarNative_PluginClose(void* instance, PluginEndCode endCode) {
+    PluginManagerNative::Instance().DispatchClose(instance, endCode);
+}
+
 __declspec(dllexport) int __stdcall QTTabBarNative_InitializeHookLibrary(const qttabbar::hooks::HookCallbacks* callbacks,
                                                                          const wchar_t* libraryPath) {
     if (callbacks == nullptr) {

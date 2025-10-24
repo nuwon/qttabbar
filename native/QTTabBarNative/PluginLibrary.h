@@ -30,6 +30,9 @@ public:
     void SetEnabled(bool enabled) { metadata_.enabled = enabled ? TRUE : FALSE; }
 
     std::optional<PluginLibraryExports> Exports() const;
+    bool SupportsInstantiation() const;
+    HRESULT CreateInstance(void** instance, const PluginClientVTable** vtable);
+    void DestroyInstance(void* instance);
 
 private:
     void ResetMetadata();
