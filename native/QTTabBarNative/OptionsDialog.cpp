@@ -11,6 +11,8 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <array>
+#include <utility>
 #include <vector>
 
 #include "Config.h"
@@ -184,7 +186,6 @@ public:
 
         SetCheckbox(IDC_TRAY_ON_CLOSE, window.trayOnClose);
         SetCheckbox(IDC_TRAY_ON_MINIMIZE, window.trayOnMinimize);
-        SetCheckbox(IDC_NEED_PLUS_BUTTON, window.needPlusButton);
         SetCheckbox(IDC_AUTO_HOOK_WINDOW, window.autoHookWindow);
         SetCheckbox(IDC_SHOW_FAIL_NAV_MSG, window.showFailNavMsg);
         SetCheckbox(IDC_CAPTURE_WECHAT_SELECTION, window.captureWeChatSelection);
@@ -223,7 +224,6 @@ public:
         bool trayClose = IsChecked(IDC_TRAY_ON_CLOSE);
         window.trayOnClose = trayClose;
         window.trayOnMinimize = IsChecked(IDC_TRAY_ON_MINIMIZE);
-        window.needPlusButton = IsChecked(IDC_NEED_PLUS_BUTTON);
         window.autoHookWindow = IsChecked(IDC_AUTO_HOOK_WINDOW);
         window.showFailNavMsg = IsChecked(IDC_SHOW_FAIL_NAV_MSG);
         window.captureWeChatSelection = IsChecked(IDC_CAPTURE_WECHAT_SELECTION);
@@ -276,7 +276,7 @@ private:
 
     void LoadStrings() {
         auto strings = LoadDelimitedStrings(IDS_OPTIONS_PAGE01_WINDOW);
-        if(strings.size() >= 17) {
+        if(strings.size() >= 16) {
             SetDlgItemTextW(Hwnd(), IDC_WINDOW_HEADER, strings[0].c_str());
             SetDlgItemTextW(Hwnd(), IDC_WINDOW_SINGLE_LABEL, strings[1].c_str());
             SetDlgItemTextW(Hwnd(), IDC_CAPTURE_ENABLE, strings[2].c_str());
@@ -293,7 +293,6 @@ private:
             SetDlgItemTextW(Hwnd(), IDC_TRAY_LABEL, strings[13].c_str());
             SetDlgItemTextW(Hwnd(), IDC_TRAY_ON_CLOSE, strings[14].c_str());
             SetDlgItemTextW(Hwnd(), IDC_TRAY_ON_MINIMIZE, strings[15].c_str());
-            SetDlgItemTextW(Hwnd(), IDC_NEED_PLUS_BUTTON, strings[16].c_str());
         }
         std::wstring others = LoadStringResource(IDS_OPTIONS_PAGE01_WINDOW_OTHERS);
         if(!others.empty()) {
@@ -449,6 +448,239 @@ private:
     }
 
     mutable CloseMode m_closeMode = CloseMode::Window;
+};
+
+class TabsOptionsPage final : public OptionsDialogPage {
+public:
+    TabsOptionsPage()
+        : OptionsDialogPage(IDD_OPTIONS_TABS, L"Tabs") {}
+
+    void SyncFromConfig(const ConfigData& config) override {
+        const TabsSettings& tabs = config.tabs;
+        SetComboSelection(IDC_TABS_NEW_TAB_COMBO, tabs.newTabPosition);
+        SetComboSelection(IDC_TABS_CLOSE_SWITCH_COMBO, tabs.nextAfterClosed);
+        SetCheckbox(IDC_TABS_ACTIVATE_NEW, tabs.activateNewTab);
+        SetCheckbox(IDC_TABS_NEVER_OPEN_SAME, tabs.neverOpenSame);
+        SetCheckbox(IDC_TABS_RENAME_AMBIGUOUS, tabs.renameAmbTabs);
+        CheckRadioButton(IDC_TABS_DRAG_SWITCH, IDC_TABS_DRAG_SUBMENU,
+                         tabs.dragOverTabOpensSDT ? IDC_TABS_DRAG_SUBMENU : IDC_TABS_DRAG_SWITCH);
+        SetCheckbox(IDC_TABS_SHOW_FOLDER_ICONS, tabs.showFolderIcon);
+        SetCheckbox(IDC_TABS_SUBDIR_ICON_ACTION, tabs.showSubDirTipOnTab);
+        SetCheckbox(IDC_TABS_SHOW_DRIVE_LETTER, tabs.showDriveLetters);
+        SetCheckbox(IDC_TABS_CLOSE_BUTTONS, tabs.showCloseButtons);
+        SetCheckbox(IDC_TABS_CLOSE_ALT_ONLY, tabs.closeBtnsWithAlt);
+        SetCheckbox(IDC_TABS_CLOSE_HOVER_ONLY, tabs.closeBtnsOnHover);
+        SetCheckbox(IDC_TABS_SHOW_NAV_BUTTONS, tabs.showNavButtons);
+        CheckRadioButton(IDC_TABS_NAV_LEFT, IDC_TABS_NAV_RIGHT,
+                         tabs.navButtonsOnRight ? IDC_TABS_NAV_RIGHT : IDC_TABS_NAV_LEFT);
+        SetCheckbox(IDC_TABS_ALLOW_MULTI_ROWS, tabs.multipleTabRows);
+        SetCheckbox(IDC_TABS_ACTIVE_ROW_BOTTOM, tabs.activeTabOnBottomRow);
+        SetCheckbox(IDC_TABS_NEED_PLUS_BUTTON, tabs.needPlusButton);
+        UpdateIconControlsEnabled();
+        UpdateCloseControlsEnabled();
+        UpdateNavButtonControls();
+        UpdateMultiRowControls();
+    }
+
+    bool SyncToConfig(ConfigData& config) const override {
+        TabsSettings& tabs = config.tabs;
+        tabs.newTabPosition = GetComboSelection(IDC_TABS_NEW_TAB_COMBO).value_or(TabPos::Rightmost);
+        tabs.nextAfterClosed = GetComboSelection(IDC_TABS_CLOSE_SWITCH_COMBO).value_or(TabPos::LastActive);
+        tabs.activateNewTab = IsChecked(IDC_TABS_ACTIVATE_NEW);
+        tabs.neverOpenSame = IsChecked(IDC_TABS_NEVER_OPEN_SAME);
+        tabs.renameAmbTabs = IsChecked(IDC_TABS_RENAME_AMBIGUOUS);
+        tabs.dragOverTabOpensSDT = IsRadioChecked(IDC_TABS_DRAG_SUBMENU);
+        tabs.showFolderIcon = IsChecked(IDC_TABS_SHOW_FOLDER_ICONS);
+        tabs.showSubDirTipOnTab = IsChecked(IDC_TABS_SUBDIR_ICON_ACTION);
+        tabs.showDriveLetters = IsChecked(IDC_TABS_SHOW_DRIVE_LETTER);
+        tabs.showCloseButtons = IsChecked(IDC_TABS_CLOSE_BUTTONS);
+        tabs.closeBtnsWithAlt = IsChecked(IDC_TABS_CLOSE_ALT_ONLY);
+        tabs.closeBtnsOnHover = IsChecked(IDC_TABS_CLOSE_HOVER_ONLY);
+        tabs.showNavButtons = IsChecked(IDC_TABS_SHOW_NAV_BUTTONS);
+        tabs.navButtonsOnRight = IsRadioChecked(IDC_TABS_NAV_RIGHT);
+        tabs.multipleTabRows = IsChecked(IDC_TABS_ALLOW_MULTI_ROWS);
+        tabs.activeTabOnBottomRow = IsChecked(IDC_TABS_ACTIVE_ROW_BOTTOM);
+        tabs.needPlusButton = IsChecked(IDC_TABS_NEED_PLUS_BUTTON);
+        return true;
+    }
+
+protected:
+    void OnInitDialog(OptionsDialogImpl* /*owner*/) override {
+        HFONT font = reinterpret_cast<HFONT>(::SendMessageW(GetParent(m_hwnd), WM_GETFONT, 0, 0));
+        if(font != nullptr) {
+            ::SendMessageW(m_hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+        }
+        LoadStrings();
+        PopulateCombos();
+        UpdateIconControlsEnabled();
+        UpdateCloseControlsEnabled();
+        UpdateNavButtonControls();
+        UpdateMultiRowControls();
+    }
+
+    BOOL OnCommand(WORD notifyCode, WORD commandId, HWND /*control*/, OptionsDialogImpl* /*owner*/) override {
+        if(notifyCode == BN_CLICKED) {
+            switch(commandId) {
+            case IDC_TABS_SHOW_FOLDER_ICONS:
+                UpdateIconControlsEnabled();
+                return TRUE;
+            case IDC_TABS_CLOSE_BUTTONS:
+                UpdateCloseControlsEnabled();
+                return TRUE;
+            case IDC_TABS_SHOW_NAV_BUTTONS:
+                UpdateNavButtonControls();
+                return TRUE;
+            case IDC_TABS_ALLOW_MULTI_ROWS:
+                UpdateMultiRowControls();
+                return TRUE;
+            default:
+                break;
+            }
+        }
+        return FALSE;
+    }
+
+private:
+    void LoadStrings() {
+        auto strings = LoadDelimitedStrings(IDS_OPTIONS_PAGE02_TABS);
+        if(strings.size() >= 33) {
+            SetDlgItemTextW(Hwnd(), IDC_TABS_HEADER, strings[0].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_OPEN_LABEL, strings[1].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_CLOSE_SWITCH_LABEL, strings[2].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_ACTIVATE_NEW, strings[3].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_NEVER_OPEN_SAME, strings[4].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_RENAME_AMBIGUOUS, strings[5].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_DRAG_HOVER_LABEL, strings[6].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_DRAG_SWITCH, strings[7].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_DRAG_SUBMENU, strings[8].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_ICON_HEADER, strings[9].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_SHOW_FOLDER_ICONS, strings[10].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_SUBDIR_ICON_ACTION, strings[11].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_SHOW_DRIVE_LETTER, strings[12].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_CLOSE_HEADER, strings[13].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_CLOSE_BUTTONS, strings[14].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_CLOSE_ALT_ONLY, strings[15].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_CLOSE_HOVER_ONLY, strings[16].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_BAR_HEADER, strings[17].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_SHOW_NAV_BUTTONS, strings[18].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_NAV_LEFT, strings[19].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_NAV_RIGHT, strings[20].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_ALLOW_MULTI_ROWS, strings[21].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TABS_ACTIVE_ROW_BOTTOM, strings[22].c_str());
+            m_newTabItems = {strings[23], strings[24], strings[25], strings[26]};
+            m_afterCloseItems = {strings[27], strings[28], strings[29], strings[30], strings[31]};
+        }
+        auto windowStrings = LoadDelimitedStrings(IDS_OPTIONS_PAGE01_WINDOW);
+        if(windowStrings.size() > 16) {
+            SetDlgItemTextW(Hwnd(), IDC_TABS_NEED_PLUS_BUTTON, windowStrings[16].c_str());
+        }
+    }
+
+    void PopulateCombos() {
+        struct ComboDef {
+            int controlId;
+            std::initializer_list<std::pair<TabPos, size_t>> items;
+        };
+
+        const ComboDef combos[] = {
+            {IDC_TABS_NEW_TAB_COMBO,
+             {{TabPos::Left, 0}, {TabPos::Right, 1}, {TabPos::Leftmost, 2}, {TabPos::Rightmost, 3}}},
+            {IDC_TABS_CLOSE_SWITCH_COMBO,
+             {{TabPos::Left, 0}, {TabPos::Right, 1}, {TabPos::Leftmost, 2}, {TabPos::Rightmost, 3}, {TabPos::LastActive, 4}}},
+        };
+
+        for(const auto& combo : combos) {
+            HWND control = ::GetDlgItem(Hwnd(), combo.controlId);
+            if(control == nullptr) {
+                continue;
+            }
+            ::SendMessageW(control, CB_RESETCONTENT, 0, 0);
+            for(auto [value, stringIndex] : combo.items) {
+                const std::wstring& text = combo.controlId == IDC_TABS_NEW_TAB_COMBO
+                                                ? m_newTabItems[stringIndex]
+                                                : m_afterCloseItems[stringIndex];
+                int idx = static_cast<int>(::SendMessageW(control, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text.c_str())));
+                if(idx != CB_ERR && idx != CB_ERRSPACE) {
+                    ::SendMessageW(control, CB_SETITEMDATA, idx,
+                                    static_cast<LPARAM>(static_cast<uint32_t>(value)));
+                }
+            }
+            ::SendMessageW(control, CB_SETCURSEL, 0, 0);
+        }
+    }
+
+    void SetCheckbox(int controlId, bool checked) {
+        ::SendDlgItemMessageW(Hwnd(), controlId, BM_SETCHECK, checked ? BST_CHECKED : BST_UNCHECKED, 0);
+    }
+
+    bool IsChecked(int controlId) const {
+        return ::SendDlgItemMessageW(Hwnd(), controlId, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    }
+
+    bool IsRadioChecked(int controlId) const {
+        return ::SendDlgItemMessageW(Hwnd(), controlId, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    }
+
+    void CheckRadioButton(int firstId, int lastId, int checkId) {
+        ::CheckRadioButton(Hwnd(), firstId, lastId, checkId);
+    }
+
+    void UpdateIconControlsEnabled() const {
+        bool enabled = IsChecked(IDC_TABS_SHOW_FOLDER_ICONS);
+        EnableWindow(::GetDlgItem(Hwnd(), IDC_TABS_SUBDIR_ICON_ACTION), enabled);
+        EnableWindow(::GetDlgItem(Hwnd(), IDC_TABS_SHOW_DRIVE_LETTER), enabled);
+    }
+
+    void UpdateCloseControlsEnabled() const {
+        bool enabled = IsChecked(IDC_TABS_CLOSE_BUTTONS);
+        EnableWindow(::GetDlgItem(Hwnd(), IDC_TABS_CLOSE_ALT_ONLY), enabled);
+        EnableWindow(::GetDlgItem(Hwnd(), IDC_TABS_CLOSE_HOVER_ONLY), enabled);
+    }
+
+    void UpdateNavButtonControls() const {
+        bool enabled = IsChecked(IDC_TABS_SHOW_NAV_BUTTONS);
+        EnableWindow(::GetDlgItem(Hwnd(), IDC_TABS_NAV_LEFT), enabled);
+        EnableWindow(::GetDlgItem(Hwnd(), IDC_TABS_NAV_RIGHT), enabled);
+    }
+
+    void UpdateMultiRowControls() const {
+        bool enabled = IsChecked(IDC_TABS_ALLOW_MULTI_ROWS);
+        EnableWindow(::GetDlgItem(Hwnd(), IDC_TABS_ACTIVE_ROW_BOTTOM), enabled);
+    }
+
+    std::optional<TabPos> GetComboSelection(int controlId) const {
+        HWND control = ::GetDlgItem(Hwnd(), controlId);
+        if(control == nullptr) {
+            return std::nullopt;
+        }
+        int sel = static_cast<int>(::SendMessageW(control, CB_GETCURSEL, 0, 0));
+        if(sel == CB_ERR) {
+            return std::nullopt;
+        }
+        LRESULT data = ::SendMessageW(control, CB_GETITEMDATA, sel, 0);
+        uint32_t raw = static_cast<uint32_t>(static_cast<LONG_PTR>(data));
+        return static_cast<TabPos>(raw);
+    }
+
+    void SetComboSelection(int controlId, TabPos value) {
+        HWND control = ::GetDlgItem(Hwnd(), controlId);
+        if(control == nullptr) {
+            return;
+        }
+        int count = static_cast<int>(::SendMessageW(control, CB_GETCOUNT, 0, 0));
+        for(int i = 0; i < count; ++i) {
+            LRESULT data = ::SendMessageW(control, CB_GETITEMDATA, i, 0);
+            uint32_t raw = static_cast<uint32_t>(static_cast<LONG_PTR>(data));
+            if(static_cast<TabPos>(raw) == value) {
+                ::SendMessageW(control, CB_SETCURSEL, i, 0);
+                return;
+            }
+        }
+        ::SendMessageW(control, CB_SETCURSEL, 0, 0);
+    }
+
+    std::array<std::wstring, 4> m_newTabItems{};
+    std::array<std::wstring, 5> m_afterCloseItems{};
 };
 
 class PlaceholderOptionsPage final : public OptionsDialogPage {
@@ -629,7 +861,7 @@ private:
         ::SendMessageW(tab, WM_SETFONT, ::SendMessageW(m_hwnd, WM_GETFONT, 0, 0), TRUE);
 
         m_pages.emplace_back(std::make_unique<WindowOptionsPage>());
-        m_pages.emplace_back(std::make_unique<PlaceholderOptionsPage>(IDD_OPTIONS_TABS, L"Tabs"));
+        m_pages.emplace_back(std::make_unique<TabsOptionsPage>());
         m_pages.emplace_back(std::make_unique<PlaceholderOptionsPage>(IDD_OPTIONS_TWEAKS, L"Tweaks"));
         m_pages.emplace_back(std::make_unique<PlaceholderOptionsPage>(IDD_OPTIONS_TOOLTIPS, L"Tooltips"));
         m_pages.emplace_back(std::make_unique<PlaceholderOptionsPage>(IDD_OPTIONS_GENERAL, L"General"));

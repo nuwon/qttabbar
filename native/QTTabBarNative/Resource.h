@@ -17,6 +17,7 @@
 #define IDS_OPTIONS_WINDOW_AUTOHOOK     2003
 #define IDS_OPTIONS_WINDOW_FAILMSG      2004
 #define IDS_OPTIONS_WINDOW_CAPTURESEL   2005
+#define IDS_OPTIONS_PAGE02_TABS         2006
 
 #define IDD_OPTIONS_DIALOG              300
 #define IDD_OPTIONS_WINDOW              301
@@ -94,7 +95,6 @@
 #define IDC_TRAY_ON_MINIMIZE            1107
 #define IDC_AUTO_HOOK_WINDOW            1108
 #define IDC_SHOW_FAIL_NAV_MSG           1109
-#define IDC_NEED_PLUS_BUTTON            1110
 
 #define IDC_WINDOW_HEADER               1200
 #define IDC_WINDOW_SINGLE_LABEL         1201
@@ -103,6 +103,32 @@
 #define IDC_CLOSE_BUTTON_LABEL          1204
 #define IDC_TRAY_LABEL                  1205
 #define IDC_WINDOW_OTHERS_LABEL         1206
+#define IDC_TABS_HEADER                 1250
+#define IDC_TABS_OPEN_LABEL             1251
+#define IDC_TABS_NEW_TAB_COMBO          1252
+#define IDC_TABS_CLOSE_SWITCH_LABEL     1253
+#define IDC_TABS_CLOSE_SWITCH_COMBO     1254
+#define IDC_TABS_ACTIVATE_NEW           1255
+#define IDC_TABS_NEVER_OPEN_SAME        1256
+#define IDC_TABS_RENAME_AMBIGUOUS       1257
+#define IDC_TABS_DRAG_HOVER_LABEL       1258
+#define IDC_TABS_DRAG_SWITCH            1259
+#define IDC_TABS_DRAG_SUBMENU           1260
+#define IDC_TABS_ICON_HEADER            1261
+#define IDC_TABS_SHOW_FOLDER_ICONS      1262
+#define IDC_TABS_SUBDIR_ICON_ACTION     1263
+#define IDC_TABS_SHOW_DRIVE_LETTER      1264
+#define IDC_TABS_CLOSE_HEADER           1265
+#define IDC_TABS_CLOSE_BUTTONS          1266
+#define IDC_TABS_CLOSE_ALT_ONLY         1267
+#define IDC_TABS_CLOSE_HOVER_ONLY       1268
+#define IDC_TABS_BAR_HEADER             1269
+#define IDC_TABS_SHOW_NAV_BUTTONS       1270
+#define IDC_TABS_NAV_LEFT               1271
+#define IDC_TABS_NAV_RIGHT              1272
+#define IDC_TABS_ALLOW_MULTI_ROWS       1273
+#define IDC_TABS_ACTIVE_ROW_BOTTOM      1274
+#define IDC_TABS_NEED_PLUS_BUTTON       1275
 #define IDC_CAPTURE_ENABLE              1210
 #define IDC_CAPTURE_DISABLE             1211
 #define IDC_DEFAULT_LOCATION_EDIT       1212

@@ -78,17 +78,41 @@ BEGIN
     CONTROL         "",IDC_TRAY_ON_CLOSE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,218,150,10
     CONTROL         "",IDC_TRAY_ON_MINIMIZE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,180,218,150,10
     LTEXT           "",IDC_WINDOW_OTHERS_LABEL,7,234,326,10
-    CONTROL         "",IDC_NEED_PLUS_BUTTON,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,248,150,10
     CONTROL         "",IDC_AUTO_HOOK_WINDOW,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,262,300,10
     CONTROL         "",IDC_SHOW_FAIL_NAV_MSG,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,276,300,10
     CONTROL         "",IDC_CAPTURE_WECHAT_SELECTION,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,290,300,10
 END
 
-IDD_OPTIONS_TABS DIALOGEX 0, 0, 340, 190
+IDD_OPTIONS_TABS DIALOGEX 0, 0, 340, 360
 STYLE DS_SETFONT | WS_CHILD
 FONT 9, "Segoe UI", 0, 0, 0x0
 BEGIN
-    LTEXT           "Tabs options coming soon.",IDC_STATIC,7,7,200,10
+    LTEXT           "",IDC_TABS_HEADER,7,7,326,10
+    LTEXT           "",IDC_TABS_OPEN_LABEL,7,22,160,10
+    COMBOBOX        IDC_TABS_NEW_TAB_COMBO,170,20,160,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "",IDC_TABS_CLOSE_SWITCH_LABEL,7,40,160,10
+    COMBOBOX        IDC_TABS_CLOSE_SWITCH_COMBO,170,38,160,80,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "",IDC_TABS_ACTIVATE_NEW,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,58,300,10
+    CONTROL         "",IDC_TABS_NEVER_OPEN_SAME,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,72,300,10
+    CONTROL         "",IDC_TABS_RENAME_AMBIGUOUS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,86,300,10
+    LTEXT           "",IDC_TABS_DRAG_HOVER_LABEL,7,104,326,10
+    CONTROL         "",IDC_TABS_DRAG_SWITCH,"Button",BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,14,118,300,10
+    CONTROL         "",IDC_TABS_DRAG_SUBMENU,"Button",BS_AUTORADIOBUTTON,14,132,300,10
+    LTEXT           "",IDC_TABS_ICON_HEADER,7,150,326,10
+    CONTROL         "",IDC_TABS_SHOW_FOLDER_ICONS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,164,300,10
+    CONTROL         "",IDC_TABS_SUBDIR_ICON_ACTION,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,178,284,10
+    CONTROL         "",IDC_TABS_SHOW_DRIVE_LETTER,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,192,284,10
+    LTEXT           "",IDC_TABS_CLOSE_HEADER,7,210,326,10
+    CONTROL         "",IDC_TABS_CLOSE_BUTTONS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,224,300,10
+    CONTROL         "",IDC_TABS_CLOSE_ALT_ONLY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,238,284,10
+    CONTROL         "",IDC_TABS_CLOSE_HOVER_ONLY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,252,284,10
+    LTEXT           "",IDC_TABS_BAR_HEADER,7,270,326,10
+    CONTROL         "",IDC_TABS_SHOW_NAV_BUTTONS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,284,300,10
+    CONTROL         "",IDC_TABS_NAV_LEFT,"Button",BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP,30,298,140,10
+    CONTROL         "",IDC_TABS_NAV_RIGHT,"Button",BS_AUTORADIOBUTTON,180,298,140,10
+    CONTROL         "",IDC_TABS_ALLOW_MULTI_ROWS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,312,300,10
+    CONTROL         "",IDC_TABS_ACTIVE_ROW_BOTTOM,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,326,284,10
+    CONTROL         "",IDC_TABS_NEED_PLUS_BUTTON,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,340,300,10
 END
 
 IDD_OPTIONS_TWEAKS DIALOGEX 0, 0, 340, 190
@@ -240,6 +264,7 @@ BEGIN
     IDS_OPTIONS_WINDOW_AUTOHOOK "Automatically hook Explorer windows"
     IDS_OPTIONS_WINDOW_FAILMSG "Show navigation failure message"
     IDS_OPTIONS_WINDOW_CAPTURESEL "Capture WeChat selection"
+    IDS_OPTIONS_PAGE02_TABS "Change options related to tabs.;Open new tabs:;When the current tab is closed, switch to the:;Switch to new tabs immediately;Reuse existing tabs;Rename ambiguous tabs;When drag-hovering over a tab,;Switch to it;Show the Subfolder Tip menu;Tab icons;Show folder icons on tabs;Show the Subfolder Tip menu when the icon is clicked;Show the drive letter on the icon;Close button;Show close button on tabs;Only with the Alt key down;Only on mouse hover;Tab Bar;Show navigation buttons on the tab bar;On the left;On the right;Allow multiple rows of tabs;Always put the row with the active tab on the bottom;Left of the current tab;Right of the current tab;In the leftmost position;In the rightmost position;Tab to the left;Tab to the right;Leftmost tab;Rightmost tab;Last activated tab;Behavior"
 END
 
 VS_VERSION_INFO VERSIONINFO
