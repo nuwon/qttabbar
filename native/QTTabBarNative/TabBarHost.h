@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+class NativeTabControl;
+
 class ITabBarHostOwner {
 public:
     virtual ~ITabBarHostOwner() = default;
@@ -56,6 +58,7 @@ public:
     BEGIN_MSG_MAP(TabBarHost)
         MESSAGE_HANDLER(WM_CREATE, OnCreate)
         MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
+        MESSAGE_HANDLER(WM_SIZE, OnSize)
         MESSAGE_HANDLER(WM_TIMER, OnTimer)
         MESSAGE_HANDLER(WM_CONTEXTMENU, OnContextMenu)
         MESSAGE_HANDLER(WM_COMMAND, OnCommand)
@@ -76,11 +79,6 @@ public:
     END_SINK_MAP()
 
 private:
-    struct TabDescriptor {
-        std::wstring path;
-        bool active = false;
-    };
-
     static constexpr wchar_t kRegistryRoot[] = L"Software\\QTTabBar\\";
     static constexpr wchar_t kTabsValueName[] = L"TabsOnLastClosedWindow";
     static constexpr UINT kMaxClosedHistory = 20;
@@ -95,6 +93,7 @@ private:
 
     LRESULT OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnContextMenu(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnCommand(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
@@ -131,11 +130,17 @@ private:
     void TrimClosedHistory();
     void LogTabsState(const wchar_t* source) const;
 
+    void OnTabControlTabSelected(std::size_t index);
+    void OnTabControlCloseRequested(std::size_t index);
+    void OnTabControlContextMenuRequested(std::optional<std::size_t> index, const POINT& screenPoint);
+    void OnTabControlNewTabRequested();
+    void OnTabControlBeginDrag(std::size_t index, const POINT& screenPoint);
+
     ITabBarHostOwner& m_owner;
     CComPtr<IWebBrowser2> m_spBrowser;
     DWORD m_browserCookie;
     HMENU m_hContextMenu;
-    std::vector<TabDescriptor> m_tabs;
+    std::unique_ptr<NativeTabControl> m_tabControl;
     std::deque<std::wstring> m_closedHistory;
     std::optional<std::wstring> m_pendingNavigation;
     std::wstring m_currentPath;
@@ -143,5 +148,6 @@ private:
     UINT m_dpiY;
     bool m_hasFocus;
     bool m_visible;
+    friend class NativeTabControl;
 };
 

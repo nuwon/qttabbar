@@ -199,6 +199,7 @@
     <ClInclude Include="QTSecondViewBar.h" />
     <ClInclude Include="QTTabBarNativeGuids.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="NativeTabControl.h" />
     <ClInclude Include="TabBarHost.h" />
   </ItemGroup>
   <ItemGroup>
@@ -223,6 +224,7 @@
     <ClCompile Include="QTDesktopTool.cpp" />
     <ClCompile Include="QTTabBarClass.cpp" />
     <ClCompile Include="QTSecondViewBar.cpp" />
+    <ClCompile Include="NativeTabControl.cpp" />
     <ClCompile Include="TabBarHost.cpp" />
     <ClCompile Include="QTTabBarNative.cpp" />
   </ItemGroup>
