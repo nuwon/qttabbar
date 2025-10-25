@@ -4,8 +4,10 @@
 #include "HookMessages.h"
 #include "OptionsDialog.h"
 #include "TabBarHost.h"
+#include "BreadcrumbBar.h"
 
 #include <Shldisp.h>
+#include <ShlObj.h>
 
 #include "InstanceManagerNative.h"
 
@@ -14,6 +16,24 @@ using qttabbar::BindAction;
 namespace {
 
 constexpr DWORD kRebarMaskStyle = RBBIM_STYLE | RBBIM_CHILD;
+
+std::wstring PathFromPidl(PCIDLIST_ABSOLUTE pidl) {
+    if(pidl == nullptr) {
+        return {};
+    }
+    PWSTR buffer = nullptr;
+    std::wstring path;
+    if(SUCCEEDED(::SHGetNameFromIDList(pidl, SIGDN_FILESYSPATH, &buffer)) && buffer != nullptr) {
+        path.assign(buffer);
+        ::CoTaskMemFree(buffer);
+        return path;
+    }
+    if(SUCCEEDED(::SHGetNameFromIDList(pidl, SIGDN_DESKTOPABSOLUTEPARSING, &buffer)) && buffer != nullptr) {
+        path.assign(buffer);
+        ::CoTaskMemFree(buffer);
+    }
+    return path;
+}
 
 class RebarBreakFixer {
 public:
@@ -138,6 +158,7 @@ void QTTabBarClass::FinalRelease() {
     InstanceManagerNative::Instance().UnregisterTabBar(this);
     DestroyTimers();
     ReleaseRebarSubclass();
+    ResetBreadcrumbBar();
     if(m_tabHost) {
         m_tabHost->OnParentDestroyed();
         if(m_tabHost->IsWindow()) {
@@ -248,6 +269,60 @@ void QTTabBarClass::PersistBreakPreference() const {
     }
 }
 
+void QTTabBarClass::InitializeBreadcrumbBar() {
+    if(m_breadcrumbBar || m_explorerHwnd == nullptr) {
+        return;
+    }
+    HWND hwndParent = ::FindWindowExW(m_explorerHwnd, nullptr, L"Breadcrumb Parent", nullptr);
+    if(hwndParent == nullptr) {
+        return;
+    }
+    HWND hwndToolbar = ::FindWindowExW(hwndParent, nullptr, L"ToolbarWindow32", nullptr);
+    if(hwndToolbar == nullptr) {
+        return;
+    }
+    auto helper = std::make_unique<BreadcrumbBarHelper>(hwndToolbar);
+    helper->SetItemClickedCallback([this](PCIDLIST_ABSOLUTE pidl, UINT modifiers, bool middle) {
+        return this->HandleBreadcrumbClick(pidl, modifiers, middle);
+    });
+    m_breadcrumbBar = std::move(helper);
+}
+
+void QTTabBarClass::ResetBreadcrumbBar() {
+    if(m_breadcrumbBar) {
+        m_breadcrumbBar->Reset();
+        m_breadcrumbBar.reset();
+    }
+}
+
+bool QTTabBarClass::HandleBreadcrumbClick(PCIDLIST_ABSOLUTE pidl, UINT modifiers, bool middle) {
+    if(!m_tabHost) {
+        return false;
+    }
+    std::wstring path = PathFromPidl(pidl);
+    if(path.empty()) {
+        return false;
+    }
+
+    qttabbar::MouseChord chord = middle ? qttabbar::MouseChord::Middle : qttabbar::MouseChord::Left;
+    if((modifiers & BreadcrumbBarHelper::kModifierShift) != 0) {
+        chord |= qttabbar::MouseChord::Shift;
+    }
+    if((modifiers & BreadcrumbBarHelper::kModifierCtrl) != 0) {
+        chord |= qttabbar::MouseChord::Ctrl;
+    }
+    if((modifiers & BreadcrumbBarHelper::kModifierAlt) != 0) {
+        chord |= qttabbar::MouseChord::Alt;
+    }
+
+    auto action = m_tabHost->ResolveFolderLinkAction(chord);
+    if(!action) {
+        return false;
+    }
+
+    return m_tabHost->HandleFolderLinkAction(*action, path);
+}
+
 bool QTTabBarClass::ShouldHaveBreak() const {
     CRegKey key;
     DWORD value = 1;
@@ -303,6 +378,7 @@ LRESULT QTTabBarClass::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lPara
             m_tabHost->SetExplorer(m_spExplorer);
         }
     }
+    InitializeBreadcrumbBar();
     InitializeTimers();
     return 0;
 }
@@ -310,6 +386,7 @@ LRESULT QTTabBarClass::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lPara
 LRESULT QTTabBarClass::OnDestroy(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled) {
     bHandled = TRUE;
     DestroyTimers();
+    ResetBreadcrumbBar();
     if(m_tabHost) {
         m_tabHost->OnParentDestroyed();
         if(m_tabHost->IsWindow()) {
@@ -676,11 +753,13 @@ IFACEMETHODIMP QTTabBarClass::SetSite(IUnknown* pUnkSite) {
             m_tabHost->ClearExplorer();
         }
         ReleaseRebarSubclass();
+        ResetBreadcrumbBar();
         m_explorerHwnd = nullptr;
         return S_OK;
     }
 
     InstanceManagerNative::Instance().UnregisterTabBar(this);
+    ResetBreadcrumbBar();
     m_spSite = pUnkSite;
     m_spInputObjectSite.Release();
     m_spServiceProvider.Release();
@@ -703,6 +782,7 @@ IFACEMETHODIMP QTTabBarClass::SetSite(IUnknown* pUnkSite) {
         if(SUCCEEDED(m_spExplorer->get_HWND(&handle))) {
             m_explorerHwnd = reinterpret_cast<HWND>(handle);
             InstanceManagerNative::Instance().RegisterTabBar(m_explorerHwnd, this);
+            InitializeBreadcrumbBar();
         }
     }
 
