@@ -10,6 +10,7 @@
 #include <cwctype>
 #include <cstring>
 #include <iterator>
+#include <utility>
 
 #pragma comment(lib, "Shlwapi.lib")
 
@@ -22,6 +23,9 @@
 #include "GroupsManagerNative.h"
 #include "InstanceManagerNative.h"
 #include "TextInputDialog.h"
+#include "Config.h"
+#include "ConfigEnums.h"
+#include "TabSwitchOverlay.h"
 
 namespace {
 std::wstring NormalizeUrlToPath(const std::wstring& url) {
@@ -108,7 +112,11 @@ TabBarHost::TabBarHost(ITabBarHostOwner& owner) noexcept
     , m_dpiX(96)
     , m_dpiY(96)
     , m_hasFocus(false)
-    , m_visible(false) {
+    , m_visible(false)
+    , m_useTabSwitcher(true)
+    , m_tabSwitcherActive(false)
+    , m_tabSwitcherAnchorModifiers(0)
+    , m_tabSwitcherTriggerKey(0) {
 }
 
 TabBarHost::~TabBarHost() {
@@ -405,6 +413,7 @@ void TabBarHost::OnParentDestroyed() {
     StopTimers();
     SaveSessionState();
     DisconnectBrowserEvents();
+    HideTabSwitcher(false);
 }
 
 LRESULT TabBarHost::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled) {
@@ -423,6 +432,7 @@ LRESULT TabBarHost::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/
         }
     }
     LoadClosedHistory();
+    ReloadConfiguration();
     StartTimers();
 #if defined(_WIN32_WINNT) && _WIN32_WINNT >= _WIN32_WINNT_WIN10
     if(::IsWindows10OrGreater()) {
@@ -439,6 +449,7 @@ LRESULT TabBarHost::OnDestroy(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*
     StopTimers();
     SaveSessionState();
     DisconnectBrowserEvents();
+    HideTabSwitcher(false);
     if(m_tabControl) {
         if(m_tabControl->IsWindow()) {
             m_tabControl->DestroyWindow();
@@ -511,6 +522,7 @@ LRESULT TabBarHost::OnKillFocus(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lPara
     bHandled = TRUE;
     m_hasFocus = false;
     ATLTRACE(L"TabBarHost::OnKillFocus\n");
+    HideTabSwitcher(false);
     m_owner.NotifyTabHostFocusChange(FALSE);
     return 0;
 }
@@ -535,13 +547,58 @@ LRESULT TabBarHost::OnGetDlgCode(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lPar
     return DLGC_WANTARROWS | DLGC_WANTTAB | DLGC_WANTCHARS;
 }
 
-LRESULT TabBarHost::OnKeyDown(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& bHandled) {
+LRESULT TabBarHost::OnKeyDown(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL& bHandled) {
     bHandled = TRUE;
+    UINT vk = static_cast<UINT>(wParam);
+    if(m_tabSwitcher && m_tabSwitcher->IsVisible() && vk == VK_ESCAPE) {
+        HideTabSwitcher(false);
+        return 0;
+    }
+
+    UINT modifiers = CurrentModifierMask();
+    bool isRepeat = (HIWORD(lParam) & KF_REPEAT) != 0;
+    if(HandleTabSwitcherShortcut(vk, modifiers, isRepeat)) {
+        return 0;
+    }
+
     MSG msg{};
     msg.message = WM_KEYDOWN;
     msg.wParam = wParam;
+    msg.lParam = lParam;
     if(!HandleAccelerator(&msg)) {
         bHandled = FALSE;
+    }
+    return 0;
+}
+
+LRESULT TabBarHost::OnKeyUp(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& bHandled) {
+    bHandled = FALSE;
+    if(!m_tabSwitcher || !m_tabSwitcher->IsVisible()) {
+        return 0;
+    }
+
+    UINT vk = static_cast<UINT>(wParam);
+    UINT modifiers = CurrentModifierMask();
+    if(m_tabSwitcherAnchorModifiers != 0) {
+        if((modifiers & m_tabSwitcherAnchorModifiers) == 0) {
+            HideTabSwitcher(true);
+            bHandled = TRUE;
+        }
+    } else if(vk == m_tabSwitcherTriggerKey) {
+        HideTabSwitcher(true);
+        bHandled = TRUE;
+    }
+    return 0;
+}
+
+LRESULT TabBarHost::OnSettingChange(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& bHandled) {
+    bHandled = FALSE;
+    if(lParam != 0) {
+        const wchar_t* name = reinterpret_cast<const wchar_t*>(lParam);
+        if(name != nullptr && _wcsicmp(name, L"QTTabBar.ConfigChanged") == 0) {
+            ReloadConfiguration();
+            bHandled = TRUE;
+        }
     }
     return 0;
 }
@@ -1161,4 +1218,151 @@ void TabBarHost::OnTabControlNewTabRequested() {
 
 void TabBarHost::OnTabControlBeginDrag(std::size_t index, const POINT& screenPoint) {
     ATLTRACE(L"TabBarHost::OnTabControlBeginDrag index=%u (%ld,%ld)\n", static_cast<UINT>(index), screenPoint.x, screenPoint.y);
+}
+
+void TabBarHost::EnsureTabSwitcher() {
+    if(!m_tabSwitcher) {
+        m_tabSwitcher = std::make_unique<TabSwitchOverlay>();
+        m_tabSwitcher->SetCommitCallback([this](std::size_t index) {
+            CommitTabSwitcher(index);
+        });
+    }
+}
+
+bool TabBarHost::HandleTabSwitcherShortcut(UINT vk, UINT modifiers, bool /*isRepeat*/) {
+    bool matchNext = ShortcutMatches(m_nextTabShortcut, vk, modifiers);
+    bool matchPrev = ShortcutMatches(m_prevTabShortcut, vk, modifiers);
+    if(!matchNext && !matchPrev) {
+        return false;
+    }
+
+    if(!m_tabControl) {
+        return true;
+    }
+
+    if(!m_useTabSwitcher || m_tabControl->GetCount() < 2) {
+        if(matchPrev) {
+            ActivatePreviousTab();
+        } else {
+            ActivateNextTab();
+        }
+        return true;
+    }
+
+    EnsureTabSwitcher();
+    if(!m_tabSwitcher) {
+        if(matchPrev) {
+            ActivatePreviousTab();
+        } else {
+            ActivateNextTab();
+        }
+        return true;
+    }
+
+    if(!m_tabSwitcher->IsVisible()) {
+        auto entries = m_tabControl->GetSwitchEntries();
+        if(entries.size() < 2) {
+            if(matchPrev) {
+                ActivatePreviousTab();
+            } else {
+                ActivateNextTab();
+            }
+            return true;
+        }
+        std::size_t activeIndex = m_tabControl->GetActiveIndex();
+        if(!m_tabSwitcher->Show(m_owner.GetHostWindow(), std::move(entries), activeIndex, activeIndex)) {
+            if(matchPrev) {
+                ActivatePreviousTab();
+            } else {
+                ActivateNextTab();
+            }
+            return true;
+        }
+        m_tabSwitcherActive = true;
+        m_tabSwitcherAnchorModifiers = matchPrev ? m_prevTabShortcut.modifiers : m_nextTabShortcut.modifiers;
+        m_tabSwitcherTriggerKey = vk;
+        m_tabSwitcher->Cycle(matchPrev);
+    } else {
+        if(matchPrev || matchNext) {
+            m_tabSwitcherAnchorModifiers = matchPrev ? m_prevTabShortcut.modifiers : m_nextTabShortcut.modifiers;
+            m_tabSwitcherTriggerKey = vk;
+            m_tabSwitcher->Cycle(matchPrev);
+        }
+    }
+    return true;
+}
+
+void TabBarHost::HideTabSwitcher(bool commit, std::optional<std::size_t> forcedIndex) {
+    if(!m_tabSwitcher) {
+        m_tabSwitcherActive = false;
+        m_tabSwitcherAnchorModifiers = 0;
+        m_tabSwitcherTriggerKey = 0;
+        return;
+    }
+    std::size_t index = forcedIndex.value_or(m_tabSwitcher->SelectedIndex());
+    m_tabSwitcher->Hide(commit);
+    m_tabSwitcherActive = false;
+    m_tabSwitcherAnchorModifiers = 0;
+    m_tabSwitcherTriggerKey = 0;
+    if(commit && m_tabControl) {
+        if(index < m_tabControl->GetCount()) {
+            ActivateTab(index);
+        }
+    }
+}
+
+void TabBarHost::CommitTabSwitcher(std::size_t index) {
+    HideTabSwitcher(true, index);
+}
+
+UINT TabBarHost::CurrentModifierMask() const {
+    UINT mods = 0;
+    if(::GetKeyState(VK_CONTROL) & 0x8000) {
+        mods |= MOD_CONTROL;
+    }
+    if(::GetKeyState(VK_SHIFT) & 0x8000) {
+        mods |= MOD_SHIFT;
+    }
+    if(::GetKeyState(VK_MENU) & 0x8000) {
+        mods |= MOD_ALT;
+    }
+    if((::GetKeyState(VK_LWIN) & 0x8000) || (::GetKeyState(VK_RWIN) & 0x8000)) {
+        mods |= MOD_WIN;
+    }
+    return mods;
+}
+
+void TabBarHost::ReloadConfiguration() {
+    qttabbar::ConfigData config = qttabbar::LoadConfigFromRegistry();
+    m_useTabSwitcher = config.keys.useTabSwitcher;
+    std::size_t nextIndex = static_cast<std::size_t>(qttabbar::BindAction::NextTab);
+    std::size_t prevIndex = static_cast<std::size_t>(qttabbar::BindAction::PreviousTab);
+    if(config.keys.shortcuts.size() <= nextIndex || config.keys.shortcuts.size() <= prevIndex) {
+        config.keys.shortcuts.resize(static_cast<std::size_t>(qttabbar::BindAction::KEYBOARD_ACTION_COUNT));
+    }
+    m_nextTabShortcut = DecodeShortcut(config.keys.shortcuts[nextIndex]);
+    m_prevTabShortcut = DecodeShortcut(config.keys.shortcuts[prevIndex]);
+    if(!m_useTabSwitcher) {
+        HideTabSwitcher(false);
+    }
+}
+
+TabBarHost::ShortcutKey TabBarHost::DecodeShortcut(int value) {
+    ShortcutKey shortcut;
+    constexpr int kEnabledFlag = 1 << 30;
+    constexpr int kLegacyFlag = 0x100000;
+    if((value & kEnabledFlag) != 0 || (value & kLegacyFlag) != 0) {
+        shortcut.enabled = true;
+    }
+    int sanitized = value & ~(kEnabledFlag | kLegacyFlag);
+    shortcut.key = static_cast<UINT>(sanitized & 0xFFFF);
+    shortcut.modifiers = static_cast<UINT>((static_cast<unsigned int>(sanitized) >> 16) & 0x01FF);
+    return shortcut;
+}
+
+bool TabBarHost::ShortcutMatches(const ShortcutKey& shortcut, UINT vk, UINT modifiers) const {
+    if(!shortcut.enabled || shortcut.key == 0) {
+        return false;
+    }
+    return shortcut.key == vk && shortcut.modifiers == modifiers;
 }
