@@ -510,6 +510,8 @@ LRESULT NativeTabControl::OnMouseLeave(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM 
     }
     ::InvalidateRect(m_hWnd, nullptr, FALSE);
     m_trackingMouse = false;
+    POINT emptyPoint{0, 0};
+    m_owner.OnTabControlHoverChanged(std::nullopt, emptyPoint);
     return 0;
 }
 
@@ -958,6 +960,10 @@ void NativeTabControl::UpdateHoverState(std::optional<std::size_t> newHotIndex, 
     if(newHotIndex == m_hotIndex) {
         if(newHotIndex) {
             UpdateCloseHover(newHotIndex, clientPt);
+            RECT bounds = m_tabs[*newHotIndex].metrics.bounds;
+            POINT anchor{bounds.left, bounds.bottom};
+            ::ClientToScreen(m_hWnd, &anchor);
+            m_owner.OnTabControlHoverChanged(newHotIndex, anchor);
         }
         return;
     }
@@ -969,6 +975,13 @@ void NativeTabControl::UpdateHoverState(std::optional<std::size_t> newHotIndex, 
     if(m_hotIndex && *m_hotIndex < m_tabs.size()) {
         m_tabs[*m_hotIndex].hovered = true;
         UpdateCloseHover(m_hotIndex, clientPt);
+        RECT bounds = m_tabs[*m_hotIndex].metrics.bounds;
+        POINT anchor{bounds.left, bounds.bottom};
+        ::ClientToScreen(m_hWnd, &anchor);
+        m_owner.OnTabControlHoverChanged(m_hotIndex, anchor);
+    } else {
+        POINT emptyPoint{0, 0};
+        m_owner.OnTabControlHoverChanged(std::nullopt, emptyPoint);
     }
     ::InvalidateRect(m_hWnd, nullptr, FALSE);
 }

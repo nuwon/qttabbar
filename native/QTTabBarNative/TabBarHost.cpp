@@ -26,6 +26,7 @@
 #include "Config.h"
 #include "ConfigEnums.h"
 #include "TabSwitchOverlay.h"
+#include "SubDirTipWindow.h"
 
 using qttabbar::BindAction;
 using qttabbar::MouseChord;
@@ -692,6 +693,7 @@ void TabBarHost::OnParentDestroyed() {
     SaveSessionState();
     DisconnectBrowserEvents();
     HideTabSwitcher(false);
+    HideSubDirTip();
 }
 
 LRESULT TabBarHost::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled) {
@@ -711,6 +713,10 @@ LRESULT TabBarHost::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/
     }
     LoadClosedHistory();
     ReloadConfiguration();
+    if(!m_subDirTipWindow) {
+        m_subDirTipWindow = std::make_unique<SubDirTipWindow>(*this);
+        m_subDirTipWindow->ApplyConfiguration(m_config);
+    }
     StartTimers();
 #if defined(_WIN32_WINNT) && _WIN32_WINNT >= _WIN32_WINNT_WIN10
     if(::IsWindows10OrGreater()) {
@@ -728,6 +734,13 @@ LRESULT TabBarHost::OnDestroy(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*
     SaveSessionState();
     DisconnectBrowserEvents();
     HideTabSwitcher(false);
+    HideSubDirTip();
+    if(m_subDirTipWindow) {
+        if(m_subDirTipWindow->IsWindow()) {
+            m_subDirTipWindow->DestroyWindow();
+        }
+        m_subDirTipWindow.reset();
+    }
     if(m_tabControl) {
         if(m_tabControl->IsWindow()) {
             m_tabControl->DestroyWindow();
@@ -754,6 +767,15 @@ LRESULT TabBarHost::OnTimer(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOO
         ATLTRACE(L"TabBarHost::OnTimer selectTab\n");
     } else if(wParam == ID_TIMER_CONTEXTMENU) {
         ATLTRACE(L"TabBarHost::OnTimer contextMenu\n");
+    } else if(wParam == ID_TIMER_SUBDIRTIP) {
+        ATLTRACE(L"TabBarHost::OnTimer subDirTip\n");
+        if(m_subDirTipTimer) {
+            ::KillTimer(m_hWnd, ID_TIMER_SUBDIRTIP);
+            m_subDirTipTimer = 0;
+        }
+        if(m_pendingSubDirTipIndex) {
+            ShowSubDirTip(*m_pendingSubDirTipIndex);
+        }
     }
     return 0;
 }
@@ -828,6 +850,15 @@ LRESULT TabBarHost::OnGetDlgCode(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lPar
 LRESULT TabBarHost::OnKeyDown(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL& bHandled) {
     bHandled = TRUE;
     UINT vk = static_cast<UINT>(wParam);
+    if(vk == VK_SHIFT && m_config.tips.subDirTipsWithShift) {
+        if(m_pendingSubDirTipIndex) {
+            if(m_subDirTipTimer) {
+                ::KillTimer(m_hWnd, ID_TIMER_SUBDIRTIP);
+                m_subDirTipTimer = 0;
+            }
+            ShowSubDirTip(*m_pendingSubDirTipIndex);
+        }
+    }
     if(m_tabSwitcher && m_tabSwitcher->IsVisible() && vk == VK_ESCAPE) {
         HideTabSwitcher(false);
         return 0;
@@ -851,11 +882,14 @@ LRESULT TabBarHost::OnKeyDown(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL&
 
 LRESULT TabBarHost::OnKeyUp(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& bHandled) {
     bHandled = FALSE;
+    UINT vk = static_cast<UINT>(wParam);
+    if(vk == VK_SHIFT && m_config.tips.subDirTipsWithShift) {
+        HideSubDirTip();
+    }
     if(!m_tabSwitcher || !m_tabSwitcher->IsVisible()) {
         return 0;
     }
 
-    UINT vk = static_cast<UINT>(wParam);
     UINT modifiers = CurrentModifierMask();
     if(m_tabSwitcherAnchorModifiers != 0) {
         if((modifiers & m_tabSwitcherAnchorModifiers) == 0) {
@@ -944,6 +978,8 @@ void TabBarHost::StopTimers() {
     if(m_hWnd != nullptr) {
         ::KillTimer(m_hWnd, ID_TIMER_SELECTTAB);
         ::KillTimer(m_hWnd, ID_TIMER_CONTEXTMENU);
+        ::KillTimer(m_hWnd, ID_TIMER_SUBDIRTIP);
+        m_subDirTipTimer = 0;
     }
 }
 
@@ -1403,6 +1439,66 @@ void TabBarHost::OpenNewWindowAtPath(const std::wstring& path) const {
     ::ShellExecuteW(nullptr, L"open", L"explorer.exe", path.c_str(), nullptr, SW_SHOWNORMAL);
 }
 
+void TabBarHost::NavigateToPath(const std::wstring& path) {
+    if(path.empty() || !m_spBrowser) {
+        return;
+    }
+    CComBSTR bstr(path.c_str());
+    VARIANT empty;
+    ::VariantInit(&empty);
+    m_pendingNavigation = path;
+    m_spBrowser->Navigate(bstr, &empty, &empty, &empty, &empty);
+}
+
+void TabBarHost::OpenPathFromTooltip(const std::wstring& path) {
+    HideSubDirTip();
+    NavigateToPath(path);
+}
+
+void TabBarHost::OpenPathInNewTabFromTooltip(const std::wstring& path) {
+    if(path.empty()) {
+        return;
+    }
+    HideSubDirTip();
+    AddTab(path, true, true);
+}
+
+void TabBarHost::OpenPathInNewWindowFromTooltip(const std::wstring& path) {
+    HideSubDirTip();
+    OpenNewWindowAtPath(path);
+}
+
+void TabBarHost::ShowSubDirTip(std::size_t tabIndex) {
+    if(!m_tabControl || tabIndex >= m_tabControl->GetCount()) {
+        return;
+    }
+    if(!m_config.tips.showSubDirTips || !m_config.tabs.showSubDirTipOnTab) {
+        return;
+    }
+    if(m_config.tips.subDirTipsWithShift && (::GetKeyState(VK_SHIFT) & 0x8000) == 0) {
+        return;
+    }
+    std::wstring path = m_tabControl->GetPath(tabIndex);
+    if(path.empty()) {
+        return;
+    }
+    if(!m_subDirTipWindow) {
+        m_subDirTipWindow = std::make_unique<SubDirTipWindow>(*this);
+    }
+    m_subDirTipWindow->ApplyConfiguration(m_config);
+    m_subDirTipWindow->ShowForPath(path, m_subDirTipAnchor, false);
+}
+
+void TabBarHost::HideSubDirTip() {
+    if(m_subDirTipTimer) {
+        ::KillTimer(m_hWnd, ID_TIMER_SUBDIRTIP);
+        m_subDirTipTimer = 0;
+    }
+    if(m_subDirTipWindow) {
+        m_subDirTipWindow->HideTip();
+    }
+}
+
 bool TabBarHost::FocusExplorerView() const {
     if(!m_spBrowser) {
         return false;
@@ -1635,6 +1731,30 @@ void TabBarHost::OnTabControlBeginDrag(std::size_t index, const POINT& screenPoi
     ATLTRACE(L"TabBarHost::OnTabControlBeginDrag index=%u (%ld,%ld)\n", static_cast<UINT>(index), screenPoint.x, screenPoint.y);
 }
 
+void TabBarHost::OnTabControlHoverChanged(std::optional<std::size_t> index, const POINT& screenPoint) {
+    if(!index) {
+        m_pendingSubDirTipIndex.reset();
+        HideSubDirTip();
+        return;
+    }
+    if(!m_tabControl || !m_config.tips.showSubDirTips || !m_config.tabs.showSubDirTipOnTab) {
+        HideSubDirTip();
+        return;
+    }
+
+    m_subDirTipAnchor = screenPoint;
+    m_pendingSubDirTipIndex = index;
+    if(m_config.tips.subDirTipsWithShift && (::GetKeyState(VK_SHIFT) & 0x8000) == 0) {
+        HideSubDirTip();
+        return;
+    }
+
+    if(m_subDirTipTimer) {
+        ::KillTimer(m_hWnd, ID_TIMER_SUBDIRTIP);
+    }
+    m_subDirTipTimer = ::SetTimer(m_hWnd, ID_TIMER_SUBDIRTIP, kSubDirTipTimerMs, nullptr);
+}
+
 void TabBarHost::EnsureTabSwitcher() {
     if(!m_tabSwitcher) {
         m_tabSwitcher = std::make_unique<TabSwitchOverlay>();
@@ -1749,6 +1869,14 @@ UINT TabBarHost::CurrentModifierMask() const {
 
 void TabBarHost::ReloadConfiguration() {
     qttabbar::ConfigData config = qttabbar::LoadConfigFromRegistry();
+    m_config = config;
+    if(m_tabControl) {
+        m_tabControl->ApplyConfiguration(m_config);
+    }
+    if(m_subDirTipWindow) {
+        m_subDirTipWindow->ApplyConfiguration(m_config);
+    }
+
     m_useTabSwitcher = config.keys.useTabSwitcher;
     std::size_t nextIndex = static_cast<std::size_t>(qttabbar::BindAction::NextTab);
     std::size_t prevIndex = static_cast<std::size_t>(qttabbar::BindAction::PreviousTab);
@@ -1780,6 +1908,9 @@ void TabBarHost::ReloadConfiguration() {
 
     if(!m_useTabSwitcher) {
         HideTabSwitcher(false);
+    }
+    if(!m_config.tips.showSubDirTips) {
+        HideSubDirTip();
     }
 }
 

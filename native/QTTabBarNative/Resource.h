@@ -186,6 +186,7 @@
 
 #define ID_TIMER_SELECTTAB              1
 #define ID_TIMER_CONTEXTMENU            2
+#define ID_TIMER_SUBDIRTIP              3
 #define WM_APP_UNSUBCLASS               (WM_APP + 1)
 
 #define IDD_TEXT_INPUT                  400
