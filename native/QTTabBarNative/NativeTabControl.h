@@ -55,6 +55,11 @@ public:
         MESSAGE_HANDLER(WM_LBUTTONDOWN, OnLButtonDown)
         MESSAGE_HANDLER(WM_LBUTTONUP, OnLButtonUp)
         MESSAGE_HANDLER(WM_LBUTTONDBLCLK, OnLButtonDblClk)
+        MESSAGE_HANDLER(WM_MBUTTONDOWN, OnMButtonDown)
+        MESSAGE_HANDLER(WM_MBUTTONUP, OnMButtonUp)
+        MESSAGE_HANDLER(WM_MBUTTONDBLCLK, OnMButtonDblClk)
+        MESSAGE_HANDLER(WM_XBUTTONDOWN, OnXButtonDown)
+        MESSAGE_HANDLER(WM_XBUTTONUP, OnXButtonUp)
         MESSAGE_HANDLER(WM_RBUTTONUP, OnRButtonUp)
         MESSAGE_HANDLER(WM_MOUSEWHEEL, OnMouseWheel)
         MESSAGE_HANDLER(WM_GETDLGCODE, OnGetDlgCode)
@@ -106,6 +111,11 @@ private:
     LRESULT OnLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnLButtonUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnLButtonDblClk(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnMButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnMButtonUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnMButtonDblClk(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnXButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnXButtonUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnRButtonUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnMouseWheel(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnGetDlgCode(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
