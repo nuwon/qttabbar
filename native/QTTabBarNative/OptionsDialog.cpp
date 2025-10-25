@@ -3,11 +3,13 @@
 
 #include <CommCtrl.h>
 #include <Shobjidl.h>
+#include <VersionHelpers.h>
 
 #include <atlstr.h>
 #include <windowsx.h>
 
 #include <atomic>
+#include <cwchar>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -160,6 +162,14 @@ private:
     const wchar_t* m_title;
     HWND m_hwnd = nullptr;
 };
+
+ColorValue ColorRefToColorValue(COLORREF color) {
+    return ColorValue((0xFFu << 24) | (GetRValue(color) << 16) | (GetGValue(color) << 8) | GetBValue(color));
+}
+
+COLORREF ColorValueToColorRef(ColorValue value) {
+    return RGB((value.argb >> 16) & 0xFF, (value.argb >> 8) & 0xFF, value.argb & 0xFF);
+}
 
 class WindowOptionsPage final : public OptionsDialogPage {
 public:
@@ -448,6 +458,192 @@ private:
     }
 
     mutable CloseMode m_closeMode = CloseMode::Window;
+};
+
+class TweaksOptionsPage final : public OptionsDialogPage {
+public:
+    TweaksOptionsPage()
+        : OptionsDialogPage(IDD_OPTIONS_TWEAKS, L"Tweaks") {}
+
+    void SyncFromConfig(const ConfigData& config) override {
+        const TweaksSettings& tweaks = config.tweaks;
+        SetCheckbox(IDC_TWEAKS_ALWAYS_HEADERS, tweaks.alwaysShowHeaders);
+        SetCheckbox(IDC_TWEAKS_REDIRECT_LIBRARY, tweaks.redirectLibraryFolders);
+        SetCheckbox(IDC_TWEAKS_KILL_EXT, tweaks.killExtWhileRenaming);
+        SetCheckbox(IDC_TWEAKS_F2_SELECTION, tweaks.f2Selection);
+        SetCheckbox(IDC_TWEAKS_WRAP_ARROW, tweaks.wrapArrowKeySelection);
+        SetCheckbox(IDC_TWEAKS_BACKSPACE_UP, tweaks.backspaceUpLevel);
+        SetCheckbox(IDC_TWEAKS_HORIZONTAL_SCROLL, tweaks.horizontalScroll);
+        SetCheckbox(IDC_TWEAKS_FORCE_SYSLISTVIEW, tweaks.forceSysListView);
+        SetCheckbox(IDC_TWEAKS_FULL_ROW_SELECT, tweaks.toggleFullRowSelect);
+        SetCheckbox(IDC_TWEAKS_GRID_LINES, tweaks.detailsGridLines);
+        SetCheckbox(IDC_TWEAKS_ALT_ROW_COLORS, tweaks.alternateRowColors);
+
+        m_foregroundColor = tweaks.altRowForegroundColor;
+        m_backgroundColor = tweaks.altRowBackgroundColor;
+        UpdateColorText(IDC_TWEAKS_FOREGROUND_VALUE, m_foregroundColor);
+        UpdateColorText(IDC_TWEAKS_BACKGROUND_VALUE, m_backgroundColor);
+
+        UpdateForceSysListDependencies();
+        UpdateColorControlsEnabled();
+    }
+
+    bool SyncToConfig(ConfigData& config) const override {
+        TweaksSettings& tweaks = config.tweaks;
+        tweaks.alwaysShowHeaders = IsChecked(IDC_TWEAKS_ALWAYS_HEADERS);
+        tweaks.redirectLibraryFolders = IsChecked(IDC_TWEAKS_REDIRECT_LIBRARY);
+        tweaks.killExtWhileRenaming = IsChecked(IDC_TWEAKS_KILL_EXT);
+        tweaks.f2Selection = IsChecked(IDC_TWEAKS_F2_SELECTION);
+        tweaks.wrapArrowKeySelection = IsChecked(IDC_TWEAKS_WRAP_ARROW);
+        tweaks.backspaceUpLevel = IsChecked(IDC_TWEAKS_BACKSPACE_UP);
+        tweaks.horizontalScroll = IsChecked(IDC_TWEAKS_HORIZONTAL_SCROLL);
+        tweaks.forceSysListView = IsChecked(IDC_TWEAKS_FORCE_SYSLISTVIEW);
+        tweaks.toggleFullRowSelect = IsChecked(IDC_TWEAKS_FULL_ROW_SELECT);
+        tweaks.detailsGridLines = IsChecked(IDC_TWEAKS_GRID_LINES);
+        tweaks.alternateRowColors = IsChecked(IDC_TWEAKS_ALT_ROW_COLORS);
+        tweaks.altRowForegroundColor = m_foregroundColor;
+        tweaks.altRowBackgroundColor = m_backgroundColor;
+        return true;
+    }
+
+protected:
+    void OnInitDialog(OptionsDialogImpl* /*owner*/) override {
+        HFONT font = reinterpret_cast<HFONT>(::SendMessageW(GetParent(m_hwnd), WM_GETFONT, 0, 0));
+        if(font != nullptr) {
+            ::SendMessageW(m_hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+        }
+        LoadStrings();
+        ApplyOsEnabling();
+        UpdateForceSysListDependencies();
+        UpdateColorControlsEnabled();
+        UpdateColorText(IDC_TWEAKS_FOREGROUND_VALUE, m_foregroundColor);
+        UpdateColorText(IDC_TWEAKS_BACKGROUND_VALUE, m_backgroundColor);
+    }
+
+    BOOL OnCommand(WORD notifyCode, WORD commandId, HWND /*control*/, OptionsDialogImpl* /*owner*/) override {
+        if(notifyCode == BN_CLICKED) {
+            switch(commandId) {
+            case IDC_TWEAKS_FORCE_SYSLISTVIEW:
+                UpdateForceSysListDependencies();
+                UpdateColorControlsEnabled();
+                return TRUE;
+            case IDC_TWEAKS_ALT_ROW_COLORS:
+                UpdateColorControlsEnabled();
+                return TRUE;
+            case IDC_TWEAKS_FOREGROUND_BUTTON:
+                if(ChooseColor(m_foregroundColor, IDC_TWEAKS_FOREGROUND_VALUE)) {
+                    return TRUE;
+                }
+                break;
+            case IDC_TWEAKS_BACKGROUND_BUTTON:
+                if(ChooseColor(m_backgroundColor, IDC_TWEAKS_BACKGROUND_VALUE)) {
+                    return TRUE;
+                }
+                break;
+            default:
+                break;
+            }
+        }
+        return FALSE;
+    }
+
+private:
+    void LoadStrings() {
+        auto strings = LoadDelimitedStrings(IDS_OPTIONS_PAGE03_TWEAKS);
+        if(strings.size() >= 16) {
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_HEADER, strings[0].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_GENERAL_LABEL, strings[1].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_ALWAYS_HEADERS, strings[2].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_REDIRECT_LIBRARY, strings[3].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_KILL_EXT, strings[4].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_F2_SELECTION, strings[5].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_WRAP_ARROW, strings[6].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_BACKSPACE_UP, strings[7].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_HORIZONTAL_SCROLL, strings[8].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_OLD_LIST_LABEL, strings[9].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_FORCE_SYSLISTVIEW, strings[10].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_FULL_ROW_SELECT, strings[11].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_GRID_LINES, strings[12].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_ALT_ROW_COLORS, strings[13].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_FOREGROUND_LABEL, strings[14].c_str());
+            SetDlgItemTextW(Hwnd(), IDC_TWEAKS_BACKGROUND_LABEL, strings[15].c_str());
+        }
+    }
+
+    void SetCheckbox(int controlId, bool value) {
+        ::SendDlgItemMessageW(Hwnd(), controlId, BM_SETCHECK, value ? BST_CHECKED : BST_UNCHECKED, 0);
+    }
+
+    bool IsChecked(int controlId) const {
+        return ::SendDlgItemMessageW(Hwnd(), controlId, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    }
+
+    void ApplyOsEnabling() {
+        bool isXpOrOlder = !::IsWindowsVistaOrGreater();
+        bool isWin7OrGreater = ::IsWindows7OrGreater();
+
+        EnableControl(IDC_TWEAKS_ALWAYS_HEADERS, !isXpOrOlder);
+        EnableControl(IDC_TWEAKS_BACKSPACE_UP, !isXpOrOlder);
+        EnableControl(IDC_TWEAKS_REDIRECT_LIBRARY, isWin7OrGreater);
+        EnableControl(IDC_TWEAKS_FORCE_SYSLISTVIEW, isWin7OrGreater);
+        EnableControl(IDC_TWEAKS_KILL_EXT, isXpOrOlder);
+    }
+
+    void EnableControl(int controlId, bool enabled) {
+        HWND control = ::GetDlgItem(Hwnd(), controlId);
+        if(control != nullptr) {
+            ::EnableWindow(control, enabled);
+        }
+    }
+
+    bool IsControlEnabled(int controlId) const {
+        HWND control = ::GetDlgItem(Hwnd(), controlId);
+        return control != nullptr && ::IsWindowEnabled(control);
+    }
+
+    void UpdateForceSysListDependencies() {
+        bool baseEnabled = IsControlEnabled(IDC_TWEAKS_FORCE_SYSLISTVIEW) && IsChecked(IDC_TWEAKS_FORCE_SYSLISTVIEW);
+        EnableControl(IDC_TWEAKS_FULL_ROW_SELECT, baseEnabled);
+        EnableControl(IDC_TWEAKS_GRID_LINES, baseEnabled);
+        EnableControl(IDC_TWEAKS_ALT_ROW_COLORS, baseEnabled);
+    }
+
+    void UpdateColorControlsEnabled() {
+        bool colorsEnabled = IsControlEnabled(IDC_TWEAKS_ALT_ROW_COLORS) && IsChecked(IDC_TWEAKS_ALT_ROW_COLORS);
+        EnableControl(IDC_TWEAKS_FOREGROUND_LABEL, colorsEnabled);
+        EnableControl(IDC_TWEAKS_FOREGROUND_VALUE, colorsEnabled);
+        EnableControl(IDC_TWEAKS_FOREGROUND_BUTTON, colorsEnabled);
+        EnableControl(IDC_TWEAKS_BACKGROUND_LABEL, colorsEnabled);
+        EnableControl(IDC_TWEAKS_BACKGROUND_VALUE, colorsEnabled);
+        EnableControl(IDC_TWEAKS_BACKGROUND_BUTTON, colorsEnabled);
+    }
+
+    bool ChooseColor(ColorValue& color, int valueControlId) {
+        COLORREF current = ColorValueToColorRef(color);
+        CHOOSECOLORW dialog{};
+        dialog.lStructSize = sizeof(dialog);
+        dialog.hwndOwner = Hwnd();
+        dialog.lpCustColors = m_customColors.data();
+        dialog.rgbResult = current;
+        dialog.Flags = CC_RGBINIT | CC_FULLOPEN;
+        if(::ChooseColorW(&dialog)) {
+            color = ColorRefToColorValue(dialog.rgbResult);
+            UpdateColorText(valueControlId, color);
+            return true;
+        }
+        return false;
+    }
+
+    void UpdateColorText(int controlId, ColorValue color) const {
+        wchar_t buffer[16];
+        _snwprintf_s(buffer, _countof(buffer), L"#%02X%02X%02X", (color.argb >> 16) & 0xFF, (color.argb >> 8) & 0xFF,
+                     color.argb & 0xFF);
+        ::SetDlgItemTextW(Hwnd(), controlId, buffer);
+    }
+
+    ColorValue m_foregroundColor{ColorValue(0xFF000000)};
+    ColorValue m_backgroundColor{ColorValue(0xFFFFFFFF)};
+    std::array<COLORREF, 16> m_customColors{};
 };
 
 class TabsOptionsPage final : public OptionsDialogPage {
@@ -862,7 +1058,7 @@ private:
 
         m_pages.emplace_back(std::make_unique<WindowOptionsPage>());
         m_pages.emplace_back(std::make_unique<TabsOptionsPage>());
-        m_pages.emplace_back(std::make_unique<PlaceholderOptionsPage>(IDD_OPTIONS_TWEAKS, L"Tweaks"));
+        m_pages.emplace_back(std::make_unique<TweaksOptionsPage>());
         m_pages.emplace_back(std::make_unique<PlaceholderOptionsPage>(IDD_OPTIONS_TOOLTIPS, L"Tooltips"));
         m_pages.emplace_back(std::make_unique<PlaceholderOptionsPage>(IDD_OPTIONS_GENERAL, L"General"));
         m_pages.emplace_back(std::make_unique<PlaceholderOptionsPage>(IDD_OPTIONS_APPEARANCE, L"Appearance"));
