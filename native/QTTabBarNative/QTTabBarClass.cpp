@@ -9,6 +9,8 @@
 
 #include "InstanceManagerNative.h"
 
+using qttabbar::BindAction;
+
 namespace {
 
 constexpr DWORD kRebarMaskStyle = RBBIM_STYLE | RBBIM_CHILD;
@@ -565,50 +567,40 @@ void QTTabBarClass::HandleButtonCommand(UINT commandId) {
 
     switch(commandId) {
     case ID_BUTTONBAR_NAVIGATION_BACK:
-        m_tabHost->NavigateBack();
+        ExecuteBindAction(BindAction::GoBack);
         break;
     case ID_BUTTONBAR_NAVIGATION_FORWARD:
-        m_tabHost->NavigateForward();
+        ExecuteBindAction(BindAction::GoForward);
         break;
     case ID_BUTTONBAR_NEW_WINDOW:
-        if(m_spExplorer) {
-            std::wstring path = m_tabHost->GetCurrentPath();
-            if(!path.empty()) {
-                CComVariant url(path.c_str());
-                CComVariant flags(navOpenInNewWindow);
-                CComVariant empty;
-                m_spExplorer->Navigate2(&url, &flags, &empty, &empty, &empty);
-            }
-        }
+        ExecuteBindAction(BindAction::NewWindow);
         break;
     case ID_BUTTONBAR_CLONE_TAB:
-        m_tabHost->CloneActiveTab();
+        ExecuteBindAction(BindAction::CloneCurrent);
         break;
     case ID_BUTTONBAR_CLOSE_TAB:
-        m_tabHost->CloseActiveTab();
+        ExecuteBindAction(BindAction::CloseCurrent);
         break;
     case ID_BUTTONBAR_CLOSE_OTHERS:
-        m_tabHost->CloseAllTabsExceptActive();
+        ExecuteBindAction(BindAction::CloseAllButCurrent);
         break;
     case ID_BUTTONBAR_CLOSE_LEFT:
-        m_tabHost->CloseTabsToLeft();
+        ExecuteBindAction(BindAction::CloseLeft);
         break;
     case ID_BUTTONBAR_CLOSE_RIGHT:
-        m_tabHost->CloseTabsToRight();
+        ExecuteBindAction(BindAction::CloseRight);
         break;
     case ID_BUTTONBAR_CLOSE_WINDOW:
-        if(m_spExplorer) {
-            m_spExplorer->Quit();
-        }
+        ExecuteBindAction(BindAction::CloseWindow);
         break;
     case ID_BUTTONBAR_GO_UP:
-        m_tabHost->GoUpOneLevel();
+        ExecuteBindAction(BindAction::UpOneLevel);
         break;
     case ID_BUTTONBAR_REFRESH:
-        m_tabHost->RefreshExplorer();
+        ExecuteBindAction(BindAction::Refresh);
         break;
     case ID_BUTTONBAR_OPTIONS:
-        m_tabHost->OpenOptions();
+        ExecuteBindAction(BindAction::ShowOptions);
         break;
     case ID_BUTTONBAR_LOCK_TAB:
     case ID_BUTTONBAR_TOPMOST:
@@ -634,6 +626,14 @@ std::wstring QTTabBarClass::GetCurrentPath() const {
         return {};
     }
     return m_tabHost->GetCurrentPath();
+}
+
+bool QTTabBarClass::ExecuteBindAction(qttabbar::BindAction action, bool isRepeat,
+                                      std::optional<std::size_t> tabIndex) {
+    if(!m_tabHost) {
+        return false;
+    }
+    return m_tabHost->ExecuteBindAction(action, isRepeat, tabIndex);
 }
 
 std::vector<std::wstring> QTTabBarClass::GetClosedTabHistory() const {

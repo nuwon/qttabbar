@@ -20,6 +20,11 @@
 - [GitHub Mirror](https://indiff.github.io/qttabbar)
 - [Gitee Mirror](https://gitee.com/qwop/qttabbar)
 - [SourceForge Mirror](https://sourceforge.net/projects/qttabbar2/)
+
+## Native port status
+
+The native (C++) host now dispatches keyboard shortcuts and mouse chords through the same `BindAction` table used by the managed build. Navigation, tab management, group creation, and clipboard-oriented commands that previously only worked in the .NET version have native equivalents or fallbacks so default bindings remain effective during daily use.
+
 # Changes
 - [1.5.6.1-beta(2024)💥](https://github.com/indiff/qttabbar/releases/tag/v1.5.6.-beta.1) Fix auto select.
 - [1.5.5.9-beta(2023)💥](https://github.com/indiff/qttabbar/releases/tag/v1.5.5-beta.9) Capture to select,fix preview text encoding.

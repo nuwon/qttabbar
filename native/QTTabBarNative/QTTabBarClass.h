@@ -3,6 +3,9 @@
 #include "QTTabBarNativeGuids.h"
 #include "resource.h"
 #include "HookMessages.h"
+#include "ConfigEnums.h"
+
+#include <optional>
 
 class TabBarHost;
 
@@ -133,6 +136,8 @@ public:
     void OpenGroupByIndex(std::size_t index);
     HWND GetWindowHandle() const noexcept { return m_hWnd; }
     std::wstring GetCurrentPath() const;
+    bool ExecuteBindAction(qttabbar::BindAction action, bool isRepeat = false,
+                           std::optional<std::size_t> tabIndex = std::nullopt);
 
 private:
     HRESULT EnsureWindow();

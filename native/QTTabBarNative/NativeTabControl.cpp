@@ -15,9 +15,24 @@
 
 using qttabbar::ConfigData;
 using qttabbar::LoadConfigFromRegistry;
+using qttabbar::MouseChord;
+using qttabbar::MouseTarget;
 using qttabbar::WriteConfigToRegistry;
 
 namespace {
+MouseChord ComposeMouseChord(MouseChord base) {
+    if(::GetKeyState(VK_SHIFT) & 0x8000) {
+        base |= MouseChord::Shift;
+    }
+    if(::GetKeyState(VK_CONTROL) & 0x8000) {
+        base |= MouseChord::Ctrl;
+    }
+    if(::GetKeyState(VK_MENU) & 0x8000) {
+        base |= MouseChord::Alt;
+    }
+    return base;
+}
+
 COLORREF ToColorRef(uint32_t argb) {
     BYTE r = static_cast<BYTE>((argb >> 16) & 0xFF);
     BYTE g = static_cast<BYTE>((argb >> 8) & 0xFF);
@@ -502,6 +517,16 @@ LRESULT NativeTabControl::OnLButtonDown(UINT /*uMsg*/, WPARAM wParam, LPARAM lPa
     bHandled = TRUE;
     POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
     auto tabIndex = HitTestTab(pt);
+    MouseChord chord = ComposeMouseChord(MouseChord::Left);
+    if(tabIndex) {
+        if(m_owner.HandleMouseAction(MouseTarget::Tab, chord, tabIndex)) {
+            return 0;
+        }
+    } else {
+        if(m_owner.HandleMouseAction(MouseTarget::TabBarBackground, chord)) {
+            return 0;
+        }
+    }
     if(tabIndex) {
         std::size_t index = *tabIndex;
         if(HitTestClose(m_tabs[index], pt)) {
@@ -555,11 +580,77 @@ LRESULT NativeTabControl::OnLButtonDblClk(UINT /*uMsg*/, WPARAM /*wParam*/, LPAR
     bHandled = TRUE;
     POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
     auto tabIndex = HitTestTab(pt);
+    MouseChord chord = ComposeMouseChord(MouseChord::Double);
+    if(tabIndex) {
+        if(m_owner.HandleMouseAction(MouseTarget::Tab, chord, tabIndex)) {
+            return 0;
+        }
+    } else {
+        if(m_owner.HandleMouseAction(MouseTarget::TabBarBackground, chord)) {
+            return 0;
+        }
+    }
     if(tabIndex) {
         RequestBeginDrag(*tabIndex, pt);
     } else if(m_showPlusButton && HitTestPlus(pt)) {
         RequestNewTab();
     }
+    return 0;
+}
+
+LRESULT NativeTabControl::OnMButtonDown(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& bHandled) {
+    bHandled = TRUE;
+    POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+    auto tabIndex = HitTestTab(pt);
+    MouseChord chord = ComposeMouseChord(MouseChord::Middle);
+    if(tabIndex) {
+        if(m_owner.HandleMouseAction(MouseTarget::Tab, chord, tabIndex)) {
+            return 0;
+        }
+    } else {
+        if(m_owner.HandleMouseAction(MouseTarget::TabBarBackground, chord)) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
+LRESULT NativeTabControl::OnMButtonUp(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled) {
+    bHandled = TRUE;
+    return 0;
+}
+
+LRESULT NativeTabControl::OnMButtonDblClk(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& bHandled) {
+    bHandled = TRUE;
+    POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+    auto tabIndex = HitTestTab(pt);
+    MouseChord chord = ComposeMouseChord(MouseChord::Double);
+    if(tabIndex) {
+        if(m_owner.HandleMouseAction(MouseTarget::Tab, chord, tabIndex)) {
+            return 0;
+        }
+    } else {
+        if(m_owner.HandleMouseAction(MouseTarget::TabBarBackground, chord)) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
+LRESULT NativeTabControl::OnXButtonDown(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/, BOOL& bHandled) {
+    WORD button = GET_XBUTTON_WPARAM(wParam);
+    MouseChord base = (button == XBUTTON2) ? MouseChord::X2 : MouseChord::X1;
+    MouseChord chord = ComposeMouseChord(base);
+    if(m_owner.HandleMouseAction(MouseTarget::Anywhere, chord)) {
+        bHandled = TRUE;
+        return TRUE;
+    }
+    bHandled = FALSE;
+    return FALSE;
+}
+
+LRESULT NativeTabControl::OnXButtonUp(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled) {
+    bHandled = TRUE;
     return 0;
 }
 

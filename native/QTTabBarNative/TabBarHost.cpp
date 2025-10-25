@@ -27,6 +27,10 @@
 #include "ConfigEnums.h"
 #include "TabSwitchOverlay.h"
 
+using qttabbar::BindAction;
+using qttabbar::MouseChord;
+using qttabbar::MouseTarget;
+
 namespace {
 std::wstring NormalizeUrlToPath(const std::wstring& url) {
     if(url.empty()) {
@@ -369,44 +373,318 @@ void TabBarHost::OnBandVisibilityChanged(bool visible) {
     }
 }
 
+bool TabBarHost::HandleMouseAction(MouseTarget target, MouseChord chord, std::optional<std::size_t> tabIndex) {
+    if(!Any(chord)) {
+        return false;
+    }
+
+    auto action = LookupMouseAction(target, chord);
+    if(!action) {
+        action = LookupMouseAction(MouseTarget::Anywhere, chord);
+    }
+    if(!action) {
+        return false;
+    }
+    return ExecuteBindAction(*action, false, tabIndex);
+}
+
 bool TabBarHost::HandleAccelerator(MSG* pMsg) {
     if(pMsg == nullptr) {
         return false;
     }
-    if(pMsg->message == WM_KEYDOWN || pMsg->message == WM_SYSKEYDOWN) {
-        switch(pMsg->wParam) {
-        case VK_LEFT:
-            ActivatePreviousTab();
-            return true;
-        case VK_RIGHT:
-            ActivateNextTab();
-            return true;
-        case VK_DELETE:
-            CloseActiveTab();
-            return true;
-        case 'T':
-            if(::GetKeyState(VK_CONTROL) < 0) {
-                AddTab(m_currentPath, true, true);
-                return true;
-            }
-            break;
-        case 'W':
-            if(::GetKeyState(VK_CONTROL) < 0) {
-                CloseActiveTab();
-                return true;
-            }
-            break;
-        case 'Z':
-            if((::GetKeyState(VK_CONTROL) < 0) && (::GetKeyState(VK_SHIFT) < 0)) {
-                RestoreLastClosed();
-                return true;
-            }
-            break;
-        default:
-            break;
-        }
+    if(pMsg->message != WM_KEYDOWN && pMsg->message != WM_SYSKEYDOWN) {
+        return false;
     }
-    return false;
+
+    UINT vk = static_cast<UINT>(pMsg->wParam);
+    UINT modifiers = CurrentModifierMask();
+    bool isRepeat = (HIWORD(pMsg->lParam) & KF_REPEAT) != 0;
+    auto action = LookupKeyboardAction(vk, modifiers);
+    if(!action) {
+        return false;
+    }
+    return ExecuteBindAction(*action, isRepeat);
+}
+
+bool TabBarHost::ExecuteBindAction(BindAction action, bool isRepeat, std::optional<std::size_t> tabIndex) {
+    if(isRepeat && !IsRepeatAllowed(action)) {
+        return false;
+    }
+
+    auto resolveTabIndex = [&]() -> std::optional<std::size_t> {
+        if(!m_tabControl || m_tabControl->GetCount() == 0) {
+            return std::nullopt;
+        }
+        if(tabIndex && *tabIndex < m_tabControl->GetCount()) {
+            return tabIndex;
+        }
+        if(tabIndex) {
+            return std::nullopt;
+        }
+        return m_tabControl->GetActiveIndex();
+    };
+
+    auto index = resolveTabIndex();
+
+    switch(action) {
+    case BindAction::GoBack:
+        NavigateBack();
+        return true;
+    case BindAction::GoForward:
+        NavigateForward();
+        return true;
+    case BindAction::GoFirst:
+    case BindAction::FirstTab:
+        ActivateFirstTab();
+        return true;
+    case BindAction::GoLast:
+    case BindAction::LastTab:
+        ActivateLastTab();
+        return true;
+    case BindAction::NextTab:
+        ActivateNextTab();
+        return true;
+    case BindAction::PreviousTab:
+        ActivatePreviousTab();
+        return true;
+    case BindAction::NewTab: {
+        std::wstring path = ResolveTabPath(tabIndex);
+        if(path.empty()) {
+            return false;
+        }
+        AddTab(path, true, true);
+        return true;
+    }
+    case BindAction::NewWindow: {
+        std::wstring path = ResolveTabPath(tabIndex);
+        if(path.empty()) {
+            return false;
+        }
+        OpenNewWindowAtPath(path);
+        return true;
+    }
+    case BindAction::CloseCurrent:
+    case BindAction::CloseTab:
+        if(index) {
+            CloseTabAt(*index);
+            return true;
+        }
+        return false;
+    case BindAction::CloseAllButCurrent:
+    case BindAction::CloseAllButThis:
+        if(index) {
+            CloseAllTabsExcept(*index);
+            return true;
+        }
+        return false;
+    case BindAction::CloseLeft:
+    case BindAction::CloseLeftTab:
+        if(index) {
+            CloseTabsToLeftOf(*index);
+            return true;
+        }
+        return false;
+    case BindAction::CloseRight:
+    case BindAction::CloseRightTab:
+        if(index) {
+            CloseTabsToRightOf(*index);
+            return true;
+        }
+        return false;
+    case BindAction::CloseWindow:
+        if(m_spBrowser) {
+            m_spBrowser->Quit();
+            return true;
+        }
+        if(HWND explorer = m_owner.GetHostWindow()) {
+            ::PostMessageW(explorer, WM_CLOSE, 0, 0);
+            return true;
+        }
+        return false;
+    case BindAction::RestoreLastClosed:
+        RestoreLastClosed();
+        return true;
+    case BindAction::CloneCurrent:
+    case BindAction::CloneTab:
+        if(index) {
+            CloneTabAt(*index);
+            return true;
+        }
+        return false;
+    case BindAction::TearOffCurrent:
+    case BindAction::TearOffTab:
+        if(index) {
+            TearOffTab(*index);
+            return true;
+        }
+        return false;
+    case BindAction::LockCurrent:
+    case BindAction::LockTab:
+        if(index) {
+            ToggleLockTab(*index);
+            return true;
+        }
+        return false;
+    case BindAction::LockAll:
+        ToggleLockAllTabs();
+        return true;
+    case BindAction::BrowseFolder:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction BrowseFolder not implemented\n");
+        return false;
+    case BindAction::CreateNewGroup: {
+        std::wstring path = ResolveTabPath(tabIndex);
+        if(path.empty()) {
+            return false;
+        }
+        std::wstring caption = LoadStringResource(IDS_CONTEXT_DIALOG_GROUP_TITLE, L"Create Group");
+        std::wstring prompt = LoadStringResource(IDS_CONTEXT_DIALOG_GROUP_PROMPT, L"Enter a name for the new group:");
+        auto name = TextInputDialog::Show(m_hWnd, caption, prompt, {});
+        if(!name || name->empty()) {
+            return false;
+        }
+        qttabbar::GroupsManagerNative::Instance().AddGroup(*name, {path});
+        return true;
+    }
+    case BindAction::ShowOptions:
+        OpenOptions();
+        return true;
+    case BindAction::ShowToolbarMenu:
+    case BindAction::ShowTabMenuCurrent:
+    case BindAction::ShowTabMenu:
+    case BindAction::ShowGroupMenu:
+    case BindAction::ShowRecentTabsMenu:
+    case BindAction::ShowUserAppsMenu:
+    case BindAction::ShowRecentFilesMenu:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction UI menu action %u not implemented\n", static_cast<UINT>(action));
+        return false;
+    case BindAction::CopySelectedPaths:
+        CopyCurrentFolderPathToClipboard();
+        return true;
+    case BindAction::CopySelectedNames:
+        CopyCurrentFolderNameToClipboard();
+        return true;
+    case BindAction::CopyCurrentFolderPath:
+        CopyCurrentFolderPathToClipboard();
+        return true;
+    case BindAction::CopyCurrentFolderName:
+        CopyCurrentFolderNameToClipboard();
+        return true;
+    case BindAction::ChecksumSelected:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction ChecksumSelected not implemented\n");
+        return false;
+    case BindAction::ToggleTopMost:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction ToggleTopMost not implemented\n");
+        return false;
+    case BindAction::TransparencyPlus:
+    case BindAction::TransparencyMinus:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction Transparency adjustment not implemented\n");
+        return false;
+    case BindAction::FocusFileList:
+        return FocusExplorerView();
+    case BindAction::FocusSearchBarReal:
+    case BindAction::FocusSearchBarBBar:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction Search bar focus not implemented\n");
+        return false;
+    case BindAction::ShowSDTSelected:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction ShowSDTSelected not implemented\n");
+        return false;
+    case BindAction::SendToTray:
+        if(HWND explorer = m_owner.GetHostWindow()) {
+            ::ShowWindow(explorer, SW_MINIMIZE);
+            return true;
+        }
+        return false;
+    case BindAction::FocusTabBar:
+        if(m_tabControl) {
+            m_tabControl->FocusTabBar();
+            return true;
+        }
+        return false;
+    case BindAction::SortTabsByName:
+    case BindAction::SortTabsByPath:
+    case BindAction::SortTabsByActive:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction SortTabs not implemented\n");
+        return false;
+    case BindAction::SwitchToLastActivated:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction SwitchToLastActivated not implemented\n");
+        return false;
+    case BindAction::MergeWindows:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction MergeWindows not implemented\n");
+        return false;
+    case BindAction::NewFile:
+    case BindAction::NewFolder:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction new item creation not implemented\n");
+        return false;
+    case BindAction::UpOneLevelTab:
+    case BindAction::UpOneLevel:
+        GoUpOneLevel();
+        return true;
+    case BindAction::Refresh:
+        RefreshExplorer();
+        return true;
+    case BindAction::Paste:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction Paste not implemented\n");
+        return false;
+    case BindAction::Maximize:
+        if(HWND explorer = m_owner.GetHostWindow()) {
+            ::ShowWindow(explorer, SW_MAXIMIZE);
+            return true;
+        }
+        return false;
+    case BindAction::Minimize:
+        if(HWND explorer = m_owner.GetHostWindow()) {
+            ::ShowWindow(explorer, SW_MINIMIZE);
+            return true;
+        }
+        return false;
+    case BindAction::CopyTabPath:
+        if(index) {
+            CopyTabPathToClipboard(*index);
+            return true;
+        }
+        return false;
+    case BindAction::TabProperties:
+        if(index) {
+            std::wstring path = ResolveTabPath(index);
+            if(path.empty()) {
+                return false;
+            }
+            ShowProperties(path);
+            return true;
+        }
+        return false;
+    case BindAction::ShowTabSubfolderMenu:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction ShowTabSubfolderMenu not implemented\n");
+        return false;
+    case BindAction::ItemOpenInNewTab:
+    case BindAction::ItemOpenInNewTabNoSel:
+    case BindAction::ItemOpenInNewWindow:
+    case BindAction::ItemCut:
+    case BindAction::ItemCopy:
+    case BindAction::ItemDelete:
+    case BindAction::ItemProperties:
+    case BindAction::CopyItemPath:
+    case BindAction::CopyItemName:
+    case BindAction::ChecksumItem:
+    case BindAction::ItemsOpenInNewTabNoSel:
+    case BindAction::SortTab:
+    case BindAction::TurnOffRepeat:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction item-level action %u not implemented\n", static_cast<UINT>(action));
+        return false;
+    case BindAction::OpenCmd: {
+        std::wstring path = ResolveTabPath(tabIndex);
+        if(path.empty()) {
+            return false;
+        }
+        OpenCommandPrompt(path);
+        return true;
+    }
+    case BindAction::Nothing:
+        return false;
+    default:
+        ATLTRACE(L"TabBarHost::ExecuteBindAction unknown action %u\n", static_cast<UINT>(action));
+        return false;
+    }
 }
 
 void TabBarHost::OnParentDestroyed() {
@@ -747,6 +1025,21 @@ void TabBarHost::ActivatePreviousTab() {
     }
 }
 
+void TabBarHost::ActivateFirstTab() {
+    if(!m_tabControl || m_tabControl->GetCount() == 0) {
+        return;
+    }
+    ActivateTab(0);
+}
+
+void TabBarHost::ActivateLastTab() {
+    if(!m_tabControl || m_tabControl->GetCount() == 0) {
+        return;
+    }
+    std::size_t last = m_tabControl->GetCount() - 1;
+    ActivateTab(last);
+}
+
 void TabBarHost::CloseActiveTab() {
     if(!m_tabControl || m_tabControl->GetCount() == 0) {
         return;
@@ -833,12 +1126,74 @@ void TabBarHost::CloneActiveTab() {
     AddTab(m_currentPath, true, true);
 }
 
+void TabBarHost::CloneTabAt(std::size_t index) {
+    if(!m_tabControl || index >= m_tabControl->GetCount()) {
+        return;
+    }
+    std::wstring path = m_tabControl->GetPath(index);
+    if(path.empty()) {
+        return;
+    }
+    AddTab(path, true, true);
+}
+
+void TabBarHost::TearOffTab(std::size_t index) {
+    if(!m_tabControl || index >= m_tabControl->GetCount()) {
+        return;
+    }
+    if(m_tabControl->IsLocked(index)) {
+        return;
+    }
+    std::wstring path = m_tabControl->GetPath(index);
+    if(path.empty()) {
+        return;
+    }
+    OpenNewWindowAtPath(path);
+    CloseTabAt(index);
+}
+
+void TabBarHost::ToggleLockAllTabs() {
+    if(!m_tabControl || m_tabControl->GetCount() == 0) {
+        return;
+    }
+    bool anyUnlocked = false;
+    for(std::size_t i = 0; i < m_tabControl->GetCount(); ++i) {
+        if(!m_tabControl->IsLocked(i)) {
+            anyUnlocked = true;
+            break;
+        }
+    }
+    for(std::size_t i = 0; i < m_tabControl->GetCount(); ++i) {
+        m_tabControl->SetLocked(i, anyUnlocked);
+    }
+}
+
 void TabBarHost::CloseAllTabsExceptActive() {
     if(!m_tabControl || m_tabControl->GetCount() == 0) {
         return;
     }
-    std::size_t activeIndex = m_tabControl->GetActiveIndex();
-    auto closed = m_tabControl->CloseAllExcept(activeIndex);
+    CloseAllTabsExcept(m_tabControl->GetActiveIndex());
+}
+
+void TabBarHost::CloseTabsToLeft() {
+    if(!m_tabControl || m_tabControl->GetCount() == 0) {
+        return;
+    }
+    CloseTabsToLeftOf(m_tabControl->GetActiveIndex());
+}
+
+void TabBarHost::CloseTabsToRight() {
+    if(!m_tabControl || m_tabControl->GetCount() == 0) {
+        return;
+    }
+    CloseTabsToRightOf(m_tabControl->GetActiveIndex());
+}
+
+void TabBarHost::CloseAllTabsExcept(std::size_t index) {
+    if(!m_tabControl || index >= m_tabControl->GetCount()) {
+        return;
+    }
+    auto closed = m_tabControl->CloseAllExcept(index);
     for(const auto& path : closed) {
         RecordClosedEntry(path);
     }
@@ -848,37 +1203,35 @@ void TabBarHost::CloseAllTabsExceptActive() {
     if(auto active = m_tabControl->GetActivePath()) {
         m_currentPath = *active;
     }
-    LogTabsState(L"CloseAllTabsExceptActive");
+    LogTabsState(L"CloseAllTabsExcept");
 }
 
-void TabBarHost::CloseTabsToLeft() {
-    if(!m_tabControl || m_tabControl->GetCount() == 0) {
+void TabBarHost::CloseTabsToLeftOf(std::size_t index) {
+    if(!m_tabControl || index >= m_tabControl->GetCount()) {
         return;
     }
-    std::size_t activeIndex = m_tabControl->GetActiveIndex();
-    auto closed = m_tabControl->CloseTabsToLeft(activeIndex);
+    auto closed = m_tabControl->CloseTabsToLeft(index);
     for(const auto& path : closed) {
         RecordClosedEntry(path);
     }
     if(!closed.empty()) {
         PersistClosedHistory();
     }
-    LogTabsState(L"CloseTabsToLeft");
+    LogTabsState(L"CloseTabsToLeftOf");
 }
 
-void TabBarHost::CloseTabsToRight() {
-    if(!m_tabControl || m_tabControl->GetCount() == 0) {
+void TabBarHost::CloseTabsToRightOf(std::size_t index) {
+    if(!m_tabControl || index >= m_tabControl->GetCount()) {
         return;
     }
-    std::size_t activeIndex = m_tabControl->GetActiveIndex();
-    auto closed = m_tabControl->CloseTabsToRight(activeIndex);
+    auto closed = m_tabControl->CloseTabsToRight(index);
     for(const auto& path : closed) {
         RecordClosedEntry(path);
     }
     if(!closed.empty()) {
         PersistClosedHistory();
     }
-    LogTabsState(L"CloseTabsToRight");
+    LogTabsState(L"CloseTabsToRightOf");
 }
 
 void TabBarHost::GoUpOneLevel() {
@@ -1022,6 +1375,68 @@ void TabBarHost::CopyPathToClipboard(const std::wstring& path) const {
         }
     }
     ::CloseClipboard();
+}
+
+void TabBarHost::CopyCurrentFolderPathToClipboard() const {
+    CopyPathToClipboard(m_currentPath);
+}
+
+void TabBarHost::CopyCurrentFolderNameToClipboard() const {
+    std::wstring name = ExtractLeafName(m_currentPath);
+    if(name.empty()) {
+        name = m_currentPath;
+    }
+    CopyPathToClipboard(name);
+}
+
+void TabBarHost::CopyTabPathToClipboard(std::size_t index) const {
+    if(!m_tabControl || index >= m_tabControl->GetCount()) {
+        return;
+    }
+    CopyPathToClipboard(m_tabControl->GetPath(index));
+}
+
+void TabBarHost::OpenNewWindowAtPath(const std::wstring& path) const {
+    if(path.empty()) {
+        return;
+    }
+    ::ShellExecuteW(nullptr, L"open", L"explorer.exe", path.c_str(), nullptr, SW_SHOWNORMAL);
+}
+
+bool TabBarHost::FocusExplorerView() const {
+    if(!m_spBrowser) {
+        return false;
+    }
+    LONG hwndLong = 0;
+    if(FAILED(m_spBrowser->get_HWND(&hwndLong))) {
+        return false;
+    }
+    HWND hwnd = reinterpret_cast<HWND>(static_cast<intptr_t>(hwndLong));
+    if(hwnd == nullptr) {
+        return false;
+    }
+    ::SetFocus(hwnd);
+    return true;
+}
+
+std::wstring TabBarHost::ResolveTabPath(std::optional<std::size_t> tabIndex) const {
+    if(tabIndex && m_tabControl && *tabIndex < m_tabControl->GetCount()) {
+        return m_tabControl->GetPath(*tabIndex);
+    }
+    return m_currentPath;
+}
+
+bool TabBarHost::IsTabLocked(std::optional<std::size_t> tabIndex) const {
+    if(!m_tabControl || m_tabControl->GetCount() == 0) {
+        return false;
+    }
+    if(tabIndex) {
+        if(*tabIndex >= m_tabControl->GetCount()) {
+            return false;
+        }
+        return m_tabControl->IsLocked(*tabIndex);
+    }
+    return m_tabControl->IsLocked(m_tabControl->GetActiveIndex());
 }
 
 void TabBarHost::OpenCommandPrompt(const std::wstring& path) const {
@@ -1342,6 +1757,27 @@ void TabBarHost::ReloadConfiguration() {
     }
     m_nextTabShortcut = DecodeShortcut(config.keys.shortcuts[nextIndex]);
     m_prevTabShortcut = DecodeShortcut(config.keys.shortcuts[prevIndex]);
+
+    m_keyboardBindings.clear();
+    std::size_t maxActions = std::min(config.keys.shortcuts.size(),
+                                      static_cast<std::size_t>(qttabbar::BindAction::KEYBOARD_ACTION_COUNT));
+    for(std::size_t index = 0; index < maxActions; ++index) {
+        auto action = static_cast<BindAction>(index);
+        ShortcutKey shortcut = DecodeShortcut(config.keys.shortcuts[index]);
+        if(!shortcut.enabled || shortcut.key == 0) {
+            continue;
+        }
+        uint32_t composed = ComposeShortcutKey(shortcut.key, shortcut.modifiers);
+        m_keyboardBindings[composed] = action;
+    }
+
+    m_globalMouseActions = config.mouse.globalMouseActions;
+    m_tabMouseActions = config.mouse.tabActions;
+    m_barMouseActions = config.mouse.barActions;
+    m_linkMouseActions = config.mouse.linkActions;
+    m_itemMouseActions = config.mouse.itemActions;
+    m_marginMouseActions = config.mouse.marginActions;
+
     if(!m_useTabSwitcher) {
         HideTabSwitcher(false);
     }
@@ -1365,4 +1801,62 @@ bool TabBarHost::ShortcutMatches(const ShortcutKey& shortcut, UINT vk, UINT modi
         return false;
     }
     return shortcut.key == vk && shortcut.modifiers == modifiers;
+}
+
+std::optional<BindAction> TabBarHost::LookupMouseAction(MouseTarget target, MouseChord chord) const {
+    const qttabbar::MouseActionMap* map = nullptr;
+    switch(target) {
+    case MouseTarget::Anywhere:
+        map = &m_globalMouseActions;
+        break;
+    case MouseTarget::Tab:
+        map = &m_tabMouseActions;
+        break;
+    case MouseTarget::TabBarBackground:
+        map = &m_barMouseActions;
+        break;
+    case MouseTarget::FolderLink:
+        map = &m_linkMouseActions;
+        break;
+    case MouseTarget::ExplorerItem:
+        map = &m_itemMouseActions;
+        break;
+    case MouseTarget::ExplorerBackground:
+        map = &m_marginMouseActions;
+        break;
+    default:
+        break;
+    }
+    if(map != nullptr) {
+        auto it = map->find(chord);
+        if(it != map->end()) {
+            return it->second;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<BindAction> TabBarHost::LookupKeyboardAction(UINT vk, UINT modifiers) const {
+    uint32_t composed = ComposeShortcutKey(vk, modifiers);
+    auto it = m_keyboardBindings.find(composed);
+    if(it != m_keyboardBindings.end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
+uint32_t TabBarHost::ComposeShortcutKey(UINT vk, UINT modifiers) {
+    return (modifiers << 16) | (vk & 0xFFFFu);
+}
+
+bool TabBarHost::IsRepeatAllowed(BindAction action) {
+    switch(action) {
+    case BindAction::GoBack:
+    case BindAction::GoForward:
+    case BindAction::TransparencyPlus:
+    case BindAction::TransparencyMinus:
+        return true;
+    default:
+        return false;
+    }
 }

@@ -8,7 +8,10 @@
 #include <deque>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+#include "Config.h"
 
 class NativeTabControl;
 class TabSwitchOverlay;
@@ -39,6 +42,8 @@ public:
     void RestoreSessionState();
     void OnBandVisibilityChanged(bool visible);
     bool HandleAccelerator(MSG* pMsg);
+    bool HandleMouseAction(qttabbar::MouseTarget target, qttabbar::MouseChord chord,
+                           std::optional<std::size_t> tabIndex = std::nullopt);
     bool HasFocus() const noexcept { return m_hasFocus; }
     void OnParentDestroyed();
 
@@ -56,6 +61,9 @@ public:
     bool OpenCapturedWindow(const std::wstring& path);
     std::wstring GetCurrentPath() const { return m_currentPath; }
     void OpenGroupByIndex(std::size_t index);
+
+    bool ExecuteBindAction(qttabbar::BindAction action, bool isRepeat = false,
+                           std::optional<std::size_t> tabIndex = std::nullopt);
 
     BEGIN_MSG_MAP(TabBarHost)
         MESSAGE_HANDLER(WM_CREATE, OnCreate)
@@ -138,6 +146,9 @@ private:
     void PersistClosedHistory() const;
     void ClearClosedHistory();
     void RecordClosedEntry(const std::wstring& path);
+    void CloseAllTabsExcept(std::size_t index);
+    void CloseTabsToLeftOf(std::size_t index);
+    void CloseTabsToRightOf(std::size_t index);
     std::optional<std::size_t> ResolveContextTabIndex() const;
     std::wstring GetTabPath(std::size_t index) const;
     bool IsTabLocked(std::size_t index) const;
@@ -172,6 +183,23 @@ private:
     void ReloadConfiguration();
     static ShortcutKey DecodeShortcut(int value);
     bool ShortcutMatches(const ShortcutKey& shortcut, UINT vk, UINT modifiers) const;
+    std::optional<qttabbar::BindAction> LookupMouseAction(qttabbar::MouseTarget target,
+                                                          qttabbar::MouseChord chord) const;
+    std::optional<qttabbar::BindAction> LookupKeyboardAction(UINT vk, UINT modifiers) const;
+    static uint32_t ComposeShortcutKey(UINT vk, UINT modifiers);
+    static bool IsRepeatAllowed(qttabbar::BindAction action);
+    void ActivateFirstTab();
+    void ActivateLastTab();
+    void CloneTabAt(std::size_t index);
+    void TearOffTab(std::size_t index);
+    void ToggleLockAllTabs();
+    void CopyCurrentFolderPathToClipboard() const;
+    void CopyCurrentFolderNameToClipboard() const;
+    void CopyTabPathToClipboard(std::size_t index) const;
+    void OpenNewWindowAtPath(const std::wstring& path) const;
+    bool FocusExplorerView() const;
+    std::wstring ResolveTabPath(std::optional<std::size_t> tabIndex) const;
+    bool IsTabLocked(std::optional<std::size_t> tabIndex) const;
 
     ITabBarHostOwner& m_owner;
     CComPtr<IWebBrowser2> m_spBrowser;
@@ -192,6 +220,14 @@ private:
     bool m_tabSwitcherActive = false;
     UINT m_tabSwitcherAnchorModifiers = 0;
     UINT m_tabSwitcherTriggerKey = 0;
+    std::unordered_map<uint32_t, qttabbar::BindAction> m_keyboardBindings;
+    qttabbar::MouseActionMap m_globalMouseActions;
+    qttabbar::MouseActionMap m_tabMouseActions;
+    qttabbar::MouseActionMap m_barMouseActions;
+    qttabbar::MouseActionMap m_marginMouseActions;
+    qttabbar::MouseActionMap m_linkMouseActions;
+    qttabbar::MouseActionMap m_itemMouseActions;
     friend class NativeTabControl;
+    friend class QTTabBarClass;
 };
 
