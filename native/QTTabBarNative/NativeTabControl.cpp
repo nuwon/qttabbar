@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cwchar>
 #include <cwctype>
+#include <utility>
 
 #include "TabBarHost.h"
 
@@ -258,6 +259,23 @@ std::wstring NativeTabControl::GetPath(std::size_t index) const {
         return {};
     }
     return m_tabs[index].path;
+}
+
+std::vector<NativeTabControl::SwitchEntry> NativeTabControl::GetSwitchEntries() {
+    std::vector<SwitchEntry> entries;
+    entries.reserve(m_tabs.size());
+    for(auto& tab : m_tabs) {
+        if(m_config.tabs.showFolderIcon && tab.icon == nullptr) {
+            EnsureIcon(tab);
+        }
+        SwitchEntry entry;
+        entry.display = tab.alias.empty() ? tab.title : tab.alias;
+        entry.path = tab.path;
+        entry.icon = tab.icon;
+        entry.locked = tab.locked;
+        entries.push_back(std::move(entry));
+    }
+    return entries;
 }
 
 bool NativeTabControl::IsLocked(std::size_t index) const {

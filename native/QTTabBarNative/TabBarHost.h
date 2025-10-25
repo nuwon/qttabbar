@@ -11,6 +11,7 @@
 #include <vector>
 
 class NativeTabControl;
+class TabSwitchOverlay;
 
 class ITabBarHostOwner {
 public:
@@ -69,6 +70,9 @@ public:
         MESSAGE_HANDLER(WM_GETDLGCODE, OnGetDlgCode)
         MESSAGE_HANDLER(WM_KEYDOWN, OnKeyDown)
         MESSAGE_HANDLER(WM_SYSKEYDOWN, OnKeyDown)
+        MESSAGE_HANDLER(WM_KEYUP, OnKeyUp)
+        MESSAGE_HANDLER(WM_SYSKEYUP, OnKeyUp)
+        MESSAGE_HANDLER(WM_SETTINGCHANGE, OnSettingChange)
     END_MSG_MAP()
 
     BEGIN_SINK_MAP(TabBarHost)
@@ -103,6 +107,8 @@ private:
     LRESULT OnDpiChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnGetDlgCode(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnKeyDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnKeyUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnSettingChange(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     void __stdcall OnBeforeNavigate2(IDispatch* pDisp, VARIANT* url, VARIANT* flags, VARIANT* targetFrameName,
                                      VARIANT* postData, VARIANT* headers, VARIANT_BOOL* cancel);
@@ -152,6 +158,21 @@ private:
     void OnTabControlNewTabRequested();
     void OnTabControlBeginDrag(std::size_t index, const POINT& screenPoint);
 
+    struct ShortcutKey {
+        UINT key = 0;
+        UINT modifiers = 0;
+        bool enabled = false;
+    };
+
+    void EnsureTabSwitcher();
+    bool HandleTabSwitcherShortcut(UINT vk, UINT modifiers, bool isRepeat);
+    void HideTabSwitcher(bool commit, std::optional<std::size_t> forcedIndex = std::nullopt);
+    void CommitTabSwitcher(std::size_t index);
+    UINT CurrentModifierMask() const;
+    void ReloadConfiguration();
+    static ShortcutKey DecodeShortcut(int value);
+    bool ShortcutMatches(const ShortcutKey& shortcut, UINT vk, UINT modifiers) const;
+
     ITabBarHostOwner& m_owner;
     CComPtr<IWebBrowser2> m_spBrowser;
     DWORD m_browserCookie;
@@ -164,6 +185,13 @@ private:
     bool m_hasFocus;
     bool m_visible;
     std::optional<std::size_t> m_contextTabIndex;
+    std::unique_ptr<TabSwitchOverlay> m_tabSwitcher;
+    ShortcutKey m_nextTabShortcut;
+    ShortcutKey m_prevTabShortcut;
+    bool m_useTabSwitcher = true;
+    bool m_tabSwitcherActive = false;
+    UINT m_tabSwitcherAnchorModifiers = 0;
+    UINT m_tabSwitcherTriggerKey = 0;
     friend class NativeTabControl;
 };
 

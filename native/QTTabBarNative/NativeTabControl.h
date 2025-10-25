@@ -32,6 +32,13 @@ public:
         bool locked = false;
     };
 
+    struct SwitchEntry {
+        std::wstring display;
+        std::wstring path;
+        HICON icon = nullptr;
+        bool locked = false;
+    };
+
     explicit NativeTabControl(TabBarHost& owner) noexcept;
     ~NativeTabControl() override;
 
@@ -67,6 +74,7 @@ public:
     std::size_t GetActiveIndex() const noexcept;
     std::vector<std::wstring> GetTabPaths() const;
     std::wstring GetPath(std::size_t index) const;
+    std::vector<SwitchEntry> GetSwitchEntries();
     bool IsLocked(std::size_t index) const;
     bool CanCloseTab(std::size_t index) const;
     bool HasClosableTabsToLeft(std::size_t index) const;

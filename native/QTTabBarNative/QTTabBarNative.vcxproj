@@ -206,6 +206,7 @@
     <ClInclude Include="Resource.h" />
     <ClInclude Include="NativeTabControl.h" />
     <ClInclude Include="TabBarHost.h" />
+    <ClInclude Include="TabSwitchOverlay.h" />
     <ClInclude Include="TextInputDialog.h" />
   </ItemGroup>
   <ItemGroup>
@@ -236,6 +237,7 @@
     <ClCompile Include="QTSecondViewBar.cpp" />
     <ClCompile Include="NativeTabControl.cpp" />
     <ClCompile Include="TabBarHost.cpp" />
+    <ClCompile Include="TabSwitchOverlay.cpp" />
     <ClCompile Include="TextInputDialog.cpp" />
     <ClCompile Include="QTTabBarNative.cpp" />
     <ClCompile Include="RecentFileHistoryNative.cpp" />
