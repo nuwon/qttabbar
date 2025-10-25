@@ -13,6 +13,8 @@
 
 #include "Config.h"
 
+class SubDirTipWindow;
+
 class NativeTabControl;
 class TabSwitchOverlay;
 
@@ -97,6 +99,7 @@ private:
     static constexpr UINT kMaxClosedHistory = 20;
     static constexpr UINT kSelectTabTimerMs = 5000;
     static constexpr UINT kContextMenuTimerMs = 0x4B0; // 1200ms
+    static constexpr UINT kSubDirTipTimerMs = 450;
 
     static _ATL_FUNC_INFO kBeforeNavigate2Info;
     static _ATL_FUNC_INFO kNavigateComplete2Info;
@@ -168,6 +171,11 @@ private:
     void OnTabControlContextMenuRequested(std::optional<std::size_t> index, const POINT& screenPoint);
     void OnTabControlNewTabRequested();
     void OnTabControlBeginDrag(std::size_t index, const POINT& screenPoint);
+    void OnTabControlHoverChanged(std::optional<std::size_t> index, const POINT& screenPoint);
+
+    void OpenPathFromTooltip(const std::wstring& path);
+    void OpenPathInNewTabFromTooltip(const std::wstring& path);
+    void OpenPathInNewWindowFromTooltip(const std::wstring& path);
 
     struct ShortcutKey {
         UINT key = 0;
@@ -200,6 +208,9 @@ private:
     bool FocusExplorerView() const;
     std::wstring ResolveTabPath(std::optional<std::size_t> tabIndex) const;
     bool IsTabLocked(std::optional<std::size_t> tabIndex) const;
+    void NavigateToPath(const std::wstring& path);
+    void ShowSubDirTip(std::size_t tabIndex);
+    void HideSubDirTip();
 
     ITabBarHostOwner& m_owner;
     CComPtr<IWebBrowser2> m_spBrowser;
@@ -227,6 +238,11 @@ private:
     qttabbar::MouseActionMap m_marginMouseActions;
     qttabbar::MouseActionMap m_linkMouseActions;
     qttabbar::MouseActionMap m_itemMouseActions;
+    qttabbar::ConfigData m_config{};
+    std::unique_ptr<SubDirTipWindow> m_subDirTipWindow;
+    UINT_PTR m_subDirTipTimer = 0;
+    std::optional<std::size_t> m_pendingSubDirTipIndex;
+    POINT m_subDirTipAnchor{};
     friend class NativeTabControl;
     friend class QTTabBarClass;
 };

@@ -96,6 +96,12 @@
     <ClInclude Include="RecentFileHistoryNative.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SubDirTipWindow.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ThumbnailTooltipWindow.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -162,6 +168,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TabSwitchOverlay.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SubDirTipWindow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ThumbnailTooltipWindow.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -239,6 +239,8 @@
     <ClCompile Include="TabBarHost.cpp" />
     <ClCompile Include="TabSwitchOverlay.cpp" />
     <ClCompile Include="TextInputDialog.cpp" />
+    <ClCompile Include="SubDirTipWindow.cpp" />
+    <ClCompile Include="ThumbnailTooltipWindow.cpp" />
     <ClCompile Include="QTTabBarNative.cpp" />
     <ClCompile Include="RecentFileHistoryNative.cpp" />
   </ItemGroup>
