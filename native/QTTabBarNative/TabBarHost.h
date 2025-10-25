@@ -67,6 +67,11 @@ public:
     bool ExecuteBindAction(qttabbar::BindAction action, bool isRepeat = false,
                            std::optional<std::size_t> tabIndex = std::nullopt);
 
+    std::optional<qttabbar::BindAction> ResolveFolderLinkAction(qttabbar::MouseChord chord) const;
+    bool HandleFolderLinkAction(qttabbar::BindAction action, const std::wstring& path);
+    void OpenFolderInNewTab(const std::wstring& path, bool activate);
+    void OpenFolderInNewWindow(const std::wstring& path);
+
     BEGIN_MSG_MAP(TabBarHost)
         MESSAGE_HANDLER(WM_CREATE, OnCreate)
         MESSAGE_HANDLER(WM_DESTROY, OnDestroy)

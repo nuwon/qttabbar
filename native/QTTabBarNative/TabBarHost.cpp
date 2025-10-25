@@ -688,6 +688,47 @@ bool TabBarHost::ExecuteBindAction(BindAction action, bool isRepeat, std::option
     }
 }
 
+std::optional<BindAction> TabBarHost::ResolveFolderLinkAction(MouseChord chord) const {
+    if(!Any(chord)) {
+        return std::nullopt;
+    }
+    auto action = LookupMouseAction(MouseTarget::FolderLink, chord);
+    if(!action) {
+        action = LookupMouseAction(MouseTarget::Anywhere, chord);
+    }
+    return action;
+}
+
+bool TabBarHost::HandleFolderLinkAction(BindAction action, const std::wstring& path) {
+    switch(action) {
+    case BindAction::ItemOpenInNewTab:
+        OpenFolderInNewTab(path, true);
+        return true;
+    case BindAction::ItemOpenInNewTabNoSel:
+    case BindAction::ItemsOpenInNewTabNoSel:
+        OpenFolderInNewTab(path, false);
+        return true;
+    case BindAction::ItemOpenInNewWindow:
+        OpenFolderInNewWindow(path);
+        return true;
+    case BindAction::Nothing:
+        return true;
+    default:
+        return ExecuteBindAction(action);
+    }
+}
+
+void TabBarHost::OpenFolderInNewTab(const std::wstring& path, bool activate) {
+    if(path.empty()) {
+        return;
+    }
+    AddTab(path, activate, true);
+}
+
+void TabBarHost::OpenFolderInNewWindow(const std::wstring& path) {
+    OpenNewWindowAtPath(path);
+}
+
 void TabBarHost::OnParentDestroyed() {
     StopTimers();
     SaveSessionState();

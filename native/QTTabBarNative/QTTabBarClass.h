@@ -11,6 +11,8 @@ class TabBarHost;
 
 class RebarBreakFixer;
 
+class BreadcrumbBarHelper;
+
 class ATL_NO_VTABLE QTTabBarClass final
     : public CComObjectRootEx<CComMultiThreadModel>
     , public CComCoClass<QTTabBarClass, &CLSID_QTTabBarClass>
@@ -149,6 +151,9 @@ private:
     void NotifyFocusChange(BOOL hasFocus);
     void StartDeferredRebarReset();
     void PersistBreakPreference() const;
+    void InitializeBreadcrumbBar();
+    void ResetBreadcrumbBar();
+    bool HandleBreadcrumbClick(PCIDLIST_ABSOLUTE pidl, UINT modifiers, bool middle);
 
     bool ShouldHaveBreak() const;
     int ActiveRebarCount() const;
@@ -166,6 +171,7 @@ private:
     HWND m_hwndRebar;
     std::unique_ptr<RebarBreakFixer> m_rebarSubclass;
     std::unique_ptr<TabBarHost> m_tabHost;
+    std::unique_ptr<BreadcrumbBarHelper> m_breadcrumbBar;
 
     HWND m_explorerHwnd;
     SIZE m_minSize;
