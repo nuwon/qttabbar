@@ -115,11 +115,30 @@ BEGIN
     CONTROL         "",IDC_TABS_NEED_PLUS_BUTTON,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,340,300,10
 END
 
-IDD_OPTIONS_TWEAKS DIALOGEX 0, 0, 340, 190
+IDD_OPTIONS_TWEAKS DIALOGEX 0, 0, 340, 250
 STYLE DS_SETFONT | WS_CHILD
 FONT 9, "Segoe UI", 0, 0, 0x0
 BEGIN
-    LTEXT           "Tweaks options coming soon.",IDC_STATIC,7,7,200,10
+    LTEXT           "",IDC_TWEAKS_HEADER,7,7,326,10
+    LTEXT           "",IDC_TWEAKS_GENERAL_LABEL,7,22,326,10
+    CONTROL         "",IDC_TWEAKS_ALWAYS_HEADERS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,36,310,10
+    CONTROL         "",IDC_TWEAKS_REDIRECT_LIBRARY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,50,310,10
+    CONTROL         "",IDC_TWEAKS_KILL_EXT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,64,310,10
+    CONTROL         "",IDC_TWEAKS_F2_SELECTION,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,78,310,10
+    CONTROL         "",IDC_TWEAKS_WRAP_ARROW,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,92,310,10
+    CONTROL         "",IDC_TWEAKS_BACKSPACE_UP,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,106,310,10
+    CONTROL         "",IDC_TWEAKS_HORIZONTAL_SCROLL,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,120,310,10
+    LTEXT           "",IDC_TWEAKS_OLD_LIST_LABEL,7,140,326,10
+    CONTROL         "",IDC_TWEAKS_FORCE_SYSLISTVIEW,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,154,310,10
+    CONTROL         "",IDC_TWEAKS_FULL_ROW_SELECT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,168,294,10
+    CONTROL         "",IDC_TWEAKS_GRID_LINES,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,182,294,10
+    CONTROL         "",IDC_TWEAKS_ALT_ROW_COLORS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,30,196,294,10
+    LTEXT           "",IDC_TWEAKS_FOREGROUND_LABEL,30,214,120,10
+    LTEXT           "",IDC_TWEAKS_FOREGROUND_VALUE,160,214,80,10
+    PUSHBUTTON      "...",IDC_TWEAKS_FOREGROUND_BUTTON,246,212,30,12
+    LTEXT           "",IDC_TWEAKS_BACKGROUND_LABEL,30,230,120,10
+    LTEXT           "",IDC_TWEAKS_BACKGROUND_VALUE,160,230,80,10
+    PUSHBUTTON      "...",IDC_TWEAKS_BACKGROUND_BUTTON,246,228,30,12
 END
 
 IDD_OPTIONS_TOOLTIPS DIALOGEX 0, 0, 340, 190
@@ -265,6 +284,7 @@ BEGIN
     IDS_OPTIONS_WINDOW_FAILMSG "Show navigation failure message"
     IDS_OPTIONS_WINDOW_CAPTURESEL "Capture WeChat selection"
     IDS_OPTIONS_PAGE02_TABS "Change options related to tabs.;Open new tabs:;When the current tab is closed, switch to the:;Switch to new tabs immediately;Reuse existing tabs;Rename ambiguous tabs;When drag-hovering over a tab,;Switch to it;Show the Subfolder Tip menu;Tab icons;Show folder icons on tabs;Show the Subfolder Tip menu when the icon is clicked;Show the drive letter on the icon;Close button;Show close button on tabs;Only with the Alt key down;Only on mouse hover;Tab Bar;Show navigation buttons on the tab bar;On the left;On the right;Allow multiple rows of tabs;Always put the row with the active tab on the bottom;Left of the current tab;Right of the current tab;In the leftmost position;In the rightmost position;Tab to the left;Tab to the right;Leftmost tab;Rightmost tab;Last activated tab;Behavior"
+    IDS_OPTIONS_PAGE03_TWEAKS "Enable or disable tweaks to Explorer's List View.;Tweaks that can be used with either List View;Display column headers in all view modes (Windows Vista/7);Use the standard filesystem view for Library folders (Windows 7);Deselect file extension when renaming files (Windows XP);Cycle selection with F2 while renaming;Wrap around when moving the selection with the arrow keys;Backspace goes up one level (Windows Vista/7);Scrolling with mouse wheel while holding shift scrolls horizontally;Tweaks that can only be used with the older List View;Enable the older List View control (Windows 7);Full row selection in Details view;Show grid lines in Details view;Alternate row colors in Details view;Foreground color:;Background color:"
 END
 
 VS_VERSION_INFO VERSIONINFO
