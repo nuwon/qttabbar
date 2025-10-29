@@ -89,6 +89,9 @@ public:
     void SetAlias(std::size_t index, const std::wstring& alias);
     std::size_t GetCount() const noexcept { return m_tabs.size(); }
 
+    std::optional<RECT> GetTabBounds(std::size_t index) const;
+    std::vector<std::wstring> GetTabDisplayNames() const;
+
     void ApplyConfiguration(const qttabbar::ConfigData& config);
     void RefreshMetrics();
 

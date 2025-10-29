@@ -181,6 +181,19 @@ bool SubDirTipWindow::ShowForPath(const std::wstring& path, const POINT& anchor,
     return true;
 }
 
+bool SubDirTipWindow::ShowAndExecute(const std::wstring& path, const POINT& anchor, Command command, bool byKeyboard) {
+    if(!ShowForPath(path, anchor, byKeyboard)) {
+        return false;
+    }
+    if(m_items.empty()) {
+        return false;
+    }
+    std::vector<int> indices;
+    indices.push_back(0);
+    ExecuteCommand(indices, command);
+    return true;
+}
+
 void SubDirTipWindow::HideTip() {
     m_showing = false;
     if(IsWindow()) {

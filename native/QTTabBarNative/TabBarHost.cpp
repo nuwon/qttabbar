@@ -2,10 +2,15 @@
 #include "TabBarHost.h"
 
 #include <Shlwapi.h>
+#include <commctrl.h>
 #include <shellapi.h>
+#include <shobjidl.h>
+#include <shlobj.h>
 #include <VersionHelpers.h>
+#include <wincrypt.h>
 
 #include <algorithm>
+#include <array>
 #include <cwchar>
 #include <cwctype>
 #include <cstring>
@@ -13,6 +18,8 @@
 #include <utility>
 
 #pragma comment(lib, "Shlwapi.lib")
+#pragma comment(lib, "Comctl32.lib")
+#pragma comment(lib, "Advapi32.lib")
 
 #include "OptionsDialog.h"
 #include "NativeTabControl.h"
@@ -21,6 +28,7 @@
 #include "AliasStoreNative.h"
 #include "ClosedTabHistoryStore.h"
 #include "GroupsManagerNative.h"
+#include "InstanceManager.h"
 #include "InstanceManagerNative.h"
 #include "TextInputDialog.h"
 #include "Config.h"
@@ -530,8 +538,7 @@ bool TabBarHost::ExecuteBindAction(BindAction action, bool isRepeat, std::option
         ToggleLockAllTabs();
         return true;
     case BindAction::BrowseFolder:
-        ATLTRACE(L"TabBarHost::ExecuteBindAction BrowseFolder not implemented\n");
-        return false;
+        return BrowseForFolder();
     case BindAction::CreateNewGroup: {
         std::wstring path = ResolveTabPath(tabIndex);
         if(path.empty()) {
@@ -550,20 +557,29 @@ bool TabBarHost::ExecuteBindAction(BindAction action, bool isRepeat, std::option
         OpenOptions();
         return true;
     case BindAction::ShowToolbarMenu:
-    case BindAction::ShowTabMenuCurrent:
+        return ShowToolbarMenu();
+    case BindAction::ShowTabMenuCurrent: {
+        auto menuIndex = index;
+        if(!menuIndex) {
+            menuIndex = resolveTabIndex();
+        }
+        POINT origin{};
+        return ShowTabMenuAtIndex(menuIndex, origin);
+    }
     case BindAction::ShowTabMenu:
+        return ShowTabMenuAtCursor();
     case BindAction::ShowGroupMenu:
+        return ShowButtonBarMenu(ID_BUTTONBAR_GROUPS);
     case BindAction::ShowRecentTabsMenu:
+        return ShowButtonBarMenu(ID_BUTTONBAR_RECENT_TABS);
     case BindAction::ShowUserAppsMenu:
+        return ShowButtonBarMenu(ID_BUTTONBAR_APPLICATIONS);
     case BindAction::ShowRecentFilesMenu:
-        ATLTRACE(L"TabBarHost::ExecuteBindAction UI menu action %u not implemented\n", static_cast<UINT>(action));
-        return false;
+        return ShowButtonBarMenu(ID_BUTTONBAR_RECENT_FILES);
     case BindAction::CopySelectedPaths:
-        CopyCurrentFolderPathToClipboard();
-        return true;
+        return DoFileTools(0);
     case BindAction::CopySelectedNames:
-        CopyCurrentFolderNameToClipboard();
-        return true;
+        return DoFileTools(1);
     case BindAction::CopyCurrentFolderPath:
         CopyCurrentFolderPathToClipboard();
         return true;
@@ -571,30 +587,22 @@ bool TabBarHost::ExecuteBindAction(BindAction action, bool isRepeat, std::option
         CopyCurrentFolderNameToClipboard();
         return true;
     case BindAction::ChecksumSelected:
-        ATLTRACE(L"TabBarHost::ExecuteBindAction ChecksumSelected not implemented\n");
-        return false;
+        return DoFileTools(4);
     case BindAction::ToggleTopMost:
-        ATLTRACE(L"TabBarHost::ExecuteBindAction ToggleTopMost not implemented\n");
-        return false;
+        return ToggleTopMost();
     case BindAction::TransparencyPlus:
     case BindAction::TransparencyMinus:
-        ATLTRACE(L"TabBarHost::ExecuteBindAction Transparency adjustment not implemented\n");
-        return false;
+        return AdjustTransparency(action == BindAction::TransparencyPlus);
     case BindAction::FocusFileList:
         return FocusExplorerView();
     case BindAction::FocusSearchBarReal:
+        return FocusSearchBand();
     case BindAction::FocusSearchBarBBar:
-        ATLTRACE(L"TabBarHost::ExecuteBindAction Search bar focus not implemented\n");
-        return false;
+        return FocusButtonBarSearch();
     case BindAction::ShowSDTSelected:
-        ATLTRACE(L"TabBarHost::ExecuteBindAction ShowSDTSelected not implemented\n");
-        return false;
+        return ShowSelectedSubDirTip();
     case BindAction::SendToTray:
-        if(HWND explorer = m_owner.GetHostWindow()) {
-            ::ShowWindow(explorer, SW_MINIMIZE);
-            return true;
-        }
-        return false;
+        return SendWindowToTray();
     case BindAction::FocusTabBar:
         if(m_tabControl) {
             m_tabControl->FocusTabBar();
@@ -610,12 +618,11 @@ bool TabBarHost::ExecuteBindAction(BindAction action, bool isRepeat, std::option
         ATLTRACE(L"TabBarHost::ExecuteBindAction SwitchToLastActivated not implemented\n");
         return false;
     case BindAction::MergeWindows:
-        ATLTRACE(L"TabBarHost::ExecuteBindAction MergeWindows not implemented\n");
-        return false;
+        return MergeAllWindows();
     case BindAction::NewFile:
+        return CreateNewItem(false);
     case BindAction::NewFolder:
-        ATLTRACE(L"TabBarHost::ExecuteBindAction new item creation not implemented\n");
-        return false;
+        return CreateNewItem(true);
     case BindAction::UpOneLevelTab:
     case BindAction::UpOneLevel:
         GoUpOneLevel();
@@ -624,8 +631,7 @@ bool TabBarHost::ExecuteBindAction(BindAction action, bool isRepeat, std::option
         RefreshExplorer();
         return true;
     case BindAction::Paste:
-        ATLTRACE(L"TabBarHost::ExecuteBindAction Paste not implemented\n");
-        return false;
+        return InvokeShellVerb(L"paste");
     case BindAction::Maximize:
         if(HWND explorer = m_owner.GetHostWindow()) {
             ::ShowWindow(explorer, SW_MAXIMIZE);
@@ -655,7 +661,12 @@ bool TabBarHost::ExecuteBindAction(BindAction action, bool isRepeat, std::option
         }
         return false;
     case BindAction::ShowTabSubfolderMenu:
-        ATLTRACE(L"TabBarHost::ExecuteBindAction ShowTabSubfolderMenu not implemented\n");
+        if(index) {
+            return ShowTabSubfolderMenu(*index);
+        }
+        if(auto active = resolveTabIndex()) {
+            return ShowTabSubfolderMenu(*active);
+        }
         return false;
     case BindAction::ItemOpenInNewTab:
     case BindAction::ItemOpenInNewTabNoSel:
@@ -670,8 +681,7 @@ bool TabBarHost::ExecuteBindAction(BindAction action, bool isRepeat, std::option
     case BindAction::ItemsOpenInNewTabNoSel:
     case BindAction::SortTab:
     case BindAction::TurnOffRepeat:
-        ATLTRACE(L"TabBarHost::ExecuteBindAction item-level action %u not implemented\n", static_cast<UINT>(action));
-        return false;
+        return ExecuteItemCommand(action);
     case BindAction::OpenCmd: {
         std::wstring path = ResolveTabPath(tabIndex);
         if(path.empty()) {
@@ -1745,6 +1755,817 @@ void TabBarHost::LogTabsState(const wchar_t* source) const {
     }
     std::wstring state = JoinTabList(m_tabControl->GetTabPaths());
     ATLTRACE(L"TabBarHost::LogTabsState %s tabs='%s'\n", source, state.c_str());
+}
+
+bool TabBarHost::BrowseForFolder() {
+    CComPtr<IFileOpenDialog> dialog;
+    if(FAILED(dialog.CoCreateInstance(CLSID_FileOpenDialog))) {
+        return false;
+    }
+
+    DWORD options = 0;
+    if(SUCCEEDED(dialog->GetOptions(&options))) {
+        dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+    }
+
+    if(!m_currentPath.empty()) {
+        CComPtr<IShellItem> folder;
+        if(SUCCEEDED(::SHCreateItemFromParsingName(m_currentPath.c_str(), nullptr, IID_PPV_ARGS(&folder))) && folder) {
+            dialog->SetFolder(folder);
+            dialog->SetDefaultFolder(folder);
+        }
+    }
+
+    QTTabBarClass* ownerClass = dynamic_cast<QTTabBarClass*>(&m_owner);
+    HWND explorer = ownerClass ? ownerClass->m_explorerHwnd : nullptr;
+    bool restoreTopMost = false;
+    if(explorer) {
+        LONG_PTR exStyle = ::GetWindowLongPtrW(explorer, GWL_EXSTYLE);
+        if((exStyle & WS_EX_TOPMOST) != 0) {
+            restoreTopMost = true;
+            ::SetWindowPos(explorer, HWND_NOTOPMOST, 0, 0, 0, 0,
+                           SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+    }
+
+    HRESULT hr = dialog->Show(m_hWnd);
+
+    if(restoreTopMost && explorer) {
+        ::SetWindowPos(explorer, HWND_TOPMOST, 0, 0, 0, 0,
+                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+
+    if(FAILED(hr)) {
+        return false;
+    }
+
+    CComPtr<IShellItem> result;
+    if(FAILED(dialog->GetResult(&result)) || !result) {
+        return false;
+    }
+
+    PWSTR rawPath = nullptr;
+    if(FAILED(result->GetDisplayName(SIGDN_FILESYSPATH, &rawPath)) || rawPath == nullptr) {
+        return false;
+    }
+
+    std::wstring selected(rawPath);
+    ::CoTaskMemFree(rawPath);
+
+    if(selected.empty()) {
+        return false;
+    }
+
+    AddTab(selected, true, true);
+    LogTabsState(L"BrowseForFolder");
+    return true;
+}
+
+bool TabBarHost::ShowToolbarMenu() {
+    if(!m_tabControl) {
+        return false;
+    }
+    POINT pt{};
+    std::size_t count = m_tabControl->GetCount();
+    if(count > 0) {
+        auto bounds = m_tabControl->GetTabBounds(count - 1);
+        if(bounds) {
+            pt.x = bounds->right + 10;
+            pt.y = bounds->bottom - 10;
+        } else {
+            RECT rect{};
+            ::GetWindowRect(m_tabControl->m_hWnd, &rect);
+            pt.x = rect.right;
+            pt.y = rect.bottom;
+        }
+        m_contextTabIndex = count - 1;
+    } else {
+        RECT rect{};
+        ::GetWindowRect(m_hWnd, &rect);
+        pt.x = rect.left;
+        pt.y = rect.bottom;
+        m_contextTabIndex.reset();
+    }
+    ShowContextMenu(pt);
+    return true;
+}
+
+bool TabBarHost::ShowTabMenuAtIndex(std::optional<std::size_t> index, const POINT& point) {
+    if(!m_tabControl || m_tabControl->GetCount() == 0) {
+        return false;
+    }
+    std::size_t target = index ? *index : m_tabControl->GetActiveIndex();
+    if(target >= m_tabControl->GetCount()) {
+        target = m_tabControl->GetCount() - 1;
+    }
+
+    POINT menuPoint = point;
+    if(menuPoint.x == 0 && menuPoint.y == 0) {
+        auto bounds = m_tabControl->GetTabBounds(target);
+        if(bounds) {
+            menuPoint.x = bounds->right;
+            menuPoint.y = bounds->bottom;
+        } else {
+            RECT rect{};
+            ::GetWindowRect(m_tabControl->m_hWnd, &rect);
+            menuPoint.x = rect.left;
+            menuPoint.y = rect.bottom;
+        }
+    }
+
+    m_contextTabIndex = target;
+    ShowContextMenu(menuPoint);
+    return true;
+}
+
+bool TabBarHost::ShowTabMenuAtCursor() {
+    if(!m_tabControl) {
+        return false;
+    }
+    POINT pt{};
+    ::GetCursorPos(&pt);
+    m_contextTabIndex = m_tabControl->GetActiveIndex();
+    ShowContextMenu(pt);
+    return true;
+}
+
+bool TabBarHost::ShowButtonBarMenu(UINT commandId) {
+    if(auto* buttonBar = GetButtonBar()) {
+        return buttonBar->InvokeCommand(commandId);
+    }
+    return false;
+}
+
+bool TabBarHost::DoFileTools(int index) {
+    switch(index) {
+    case 0: {
+        auto paths = GetSelectedPaths();
+        if(paths.empty()) {
+            return false;
+        }
+        std::wstring joined;
+        for(size_t i = 0; i < paths.size(); ++i) {
+            joined.append(paths[i]);
+            if(i + 1 < paths.size()) {
+                joined.append(L"\r\n");
+            }
+        }
+        CopyPathToClipboard(joined);
+        return true;
+    }
+    case 1: {
+        auto names = GetSelectedNames();
+        if(names.empty()) {
+            return false;
+        }
+        std::wstring joined;
+        for(size_t i = 0; i < names.size(); ++i) {
+            joined.append(names[i]);
+            if(i + 1 < names.size()) {
+                joined.append(L"\r\n");
+            }
+        }
+        CopyPathToClipboard(joined);
+        return true;
+    }
+    case 2:
+        CopyCurrentFolderPathToClipboard();
+        return true;
+    case 3:
+        CopyCurrentFolderNameToClipboard();
+        return true;
+    case 4: {
+        auto paths = GetSelectedPaths();
+        ShowFileHashDialog(paths);
+        return true;
+    }
+    case 5: {
+        if(!m_tabControl) {
+            return false;
+        }
+        auto paths = m_tabControl->GetTabPaths();
+        if(paths.empty()) {
+            return false;
+        }
+        std::wstring joined;
+        for(size_t i = 0; i < paths.size(); ++i) {
+            joined.append(paths[i]);
+            if(i + 1 < paths.size()) {
+                joined.append(L"\r\n");
+            }
+        }
+        CopyPathToClipboard(joined);
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+bool TabBarHost::ToggleTopMost() {
+    QTTabBarClass* ownerClass = dynamic_cast<QTTabBarClass*>(&m_owner);
+    if(!ownerClass || !ownerClass->m_explorerHwnd) {
+        return false;
+    }
+    HWND explorer = ownerClass->m_explorerHwnd;
+    LONG_PTR exStyle = ::GetWindowLongPtrW(explorer, GWL_EXSTYLE);
+    bool isTopMost = (exStyle & WS_EX_TOPMOST) != 0;
+    HWND insertAfter = isTopMost ? HWND_NOTOPMOST : HWND_TOPMOST;
+    return ::SetWindowPos(explorer, insertAfter, 0, 0, 0, 0,
+                          SWP_NOMOVE | SWP_NOSIZE) != FALSE;
+}
+
+bool TabBarHost::AdjustTransparency(bool increase) {
+    QTTabBarClass* ownerClass = dynamic_cast<QTTabBarClass*>(&m_owner);
+    if(!ownerClass || !ownerClass->m_explorerHwnd) {
+        return false;
+    }
+    HWND explorer = ownerClass->m_explorerHwnd;
+    LONG_PTR exStyle = ::GetWindowLongPtrW(explorer, GWL_EXSTYLE);
+    if((exStyle & WS_EX_LAYERED) == 0) {
+        if(increase) {
+            return true;
+        }
+        ::SetWindowLongPtrW(explorer, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+        ::SetLayeredWindowAttributes(explorer, 0, 0xFF, LWA_ALPHA);
+    }
+
+    COLORREF key = 0;
+    BYTE alpha = 0xFF;
+    DWORD flags = 0;
+    if(!::GetLayeredWindowAttributes(explorer, &key, &alpha, &flags)) {
+        alpha = 0xFF;
+    }
+
+    if(increase) {
+        alpha = (alpha > 0xF3) ? 0xFF : static_cast<BYTE>(std::min<int>(0xFF, alpha + 12));
+    } else {
+        alpha = (alpha <= 0x20) ? 0x14 : static_cast<BYTE>(std::max<int>(0x14, alpha - 12));
+    }
+
+    if(!::SetLayeredWindowAttributes(explorer, key, alpha, LWA_ALPHA)) {
+        return false;
+    }
+
+    if(alpha == 0xFF) {
+        LONG_PTR current = ::GetWindowLongPtrW(explorer, GWL_EXSTYLE);
+        ::SetWindowLongPtrW(explorer, GWL_EXSTYLE, current & ~static_cast<LONG_PTR>(WS_EX_LAYERED));
+    }
+    return true;
+}
+
+bool TabBarHost::FocusSearchBand() {
+    return FocusExplorerSearch();
+}
+
+bool TabBarHost::FocusButtonBarSearch() {
+    if(auto* buttonBar = GetButtonBar()) {
+        return buttonBar->InvokeCommand(ID_BUTTONBAR_SEARCH_FOCUS);
+    }
+    return false;
+}
+
+bool TabBarHost::ShowSelectedSubDirTip() {
+    if(!m_config.tips.showSubDirTips) {
+        return false;
+    }
+    auto selections = GetSelectedPaths();
+    if(selections.size() != 1) {
+        return false;
+    }
+    std::wstring target = selections.front();
+    if(target.rfind(L"::", 0) == 0) {
+        return false;
+    }
+    auto resolved = ResolveFolderPathForAction(target);
+    if(!resolved) {
+        return false;
+    }
+    target = *resolved;
+    DWORD attr = ::GetFileAttributesW(target.c_str());
+    if(attr == INVALID_FILE_ATTRIBUTES || (attr & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+        return false;
+    }
+    if(PathIsNetworkPathW(target.c_str())) {
+        return false;
+    }
+    if(!m_subDirTipWindow) {
+        m_subDirTipWindow = std::make_unique<SubDirTipWindow>(*this);
+    }
+    m_subDirTipWindow->ApplyConfiguration(m_config);
+    POINT anchor{};
+    ::GetCursorPos(&anchor);
+    return m_subDirTipWindow->ShowAndExecute(target, anchor, SubDirTipWindow::Command::Open, true);
+}
+
+bool TabBarHost::SendWindowToTray() {
+    QTTabBarClass* ownerClass = dynamic_cast<QTTabBarClass*>(&m_owner);
+    if(!ownerClass || !ownerClass->m_explorerHwnd || !m_tabControl) {
+        return false;
+    }
+    InstanceManager::TabSnapshot snapshot;
+    snapshot.currentPath = m_currentPath;
+    snapshot.tabPaths = m_tabControl->GetTabPaths();
+    snapshot.tabNames = m_tabControl->GetTabDisplayNames();
+    InstanceManager::Instance().PushTabList(ownerClass->m_explorerHwnd, ownerClass->m_hWnd, snapshot);
+    return true;
+}
+
+bool TabBarHost::MergeAllWindows() {
+    QTTabBarClass* ownerClass = dynamic_cast<QTTabBarClass*>(&m_owner);
+    if(!ownerClass || !m_tabControl) {
+        return false;
+    }
+    auto tabBars = InstanceManagerNative::Instance().EnumerateTabBars();
+    bool merged = false;
+    for(auto* tabBar : tabBars) {
+        if(tabBar == nullptr || tabBar == ownerClass) {
+            continue;
+        }
+        if(!tabBar->m_tabHost || !tabBar->m_tabHost->m_tabControl) {
+            continue;
+        }
+        auto* otherControl = tabBar->m_tabHost->m_tabControl.get();
+        if(!otherControl) {
+            continue;
+        }
+        for(std::size_t i = 0; i < otherControl->GetCount(); ++i) {
+            std::wstring path = otherControl->GetPath(i);
+            if(path.empty()) {
+                continue;
+            }
+            std::size_t before = m_tabControl->GetCount();
+            AddTab(path, false, true);
+            std::size_t after = m_tabControl->GetCount();
+            if(after > before && otherControl->IsLocked(i)) {
+                m_tabControl->SetLocked(after - 1, true);
+            }
+            merged = true;
+        }
+        HWND explorer = tabBar->m_explorerHwnd;
+        if(explorer) {
+            ::PostMessageW(explorer, WM_CLOSE, 0, 0);
+        }
+    }
+    if(merged) {
+        LogTabsState(L"MergeAllWindows");
+    }
+    return merged;
+}
+
+bool TabBarHost::CreateNewItem(bool isFolder) {
+    if(m_currentPath.empty() || ::GetFileAttributesW(m_currentPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
+    std::wstring baseName = isFolder ? L"New Folder" : L"New Text Document";
+    std::wstring extension = isFolder ? L"" : L".txt";
+    std::wstring candidate = m_currentPath + L"\\" + baseName + extension;
+    int counter = 2;
+    while(::GetFileAttributesW(candidate.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        candidate = m_currentPath + L"\\" + baseName + L" (" + std::to_wstring(counter) + L")" + extension;
+        ++counter;
+    }
+
+    bool created = false;
+    if(isFolder) {
+        created = ::CreateDirectoryW(candidate.c_str(), nullptr) != FALSE;
+    } else {
+        HANDLE file = ::CreateFileW(candidate.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+        if(file != INVALID_HANDLE_VALUE) {
+            ::CloseHandle(file);
+            created = true;
+        }
+    }
+
+    if(!created) {
+        return false;
+    }
+
+    if(auto view = GetShellView()) {
+        view->Refresh();
+    }
+    SelectInExplorer(candidate, true);
+    return true;
+}
+
+bool TabBarHost::ExecuteItemCommand(BindAction action) {
+    switch(action) {
+    case BindAction::ItemOpenInNewTab:
+        return OpenSelectedInNewTab(true);
+    case BindAction::ItemOpenInNewTabNoSel:
+    case BindAction::ItemsOpenInNewTabNoSel:
+        return OpenSelectedInNewTab(false);
+    case BindAction::ItemOpenInNewWindow:
+        return OpenSelectedInNewWindow();
+    case BindAction::ItemCut:
+        return InvokeShellVerb(L"cut");
+    case BindAction::ItemCopy:
+        return InvokeShellVerb(L"copy");
+    case BindAction::ItemDelete:
+        return InvokeShellVerb(L"delete");
+    case BindAction::ItemProperties: {
+        auto paths = GetSelectedPaths();
+        if(paths.empty()) {
+            return false;
+        }
+        ShowProperties(paths.front());
+        return true;
+    }
+    case BindAction::CopyItemPath:
+        return DoFileTools(0);
+    case BindAction::CopyItemName:
+        return DoFileTools(1);
+    case BindAction::ChecksumItem: {
+        auto paths = GetSelectedPaths();
+        if(paths.empty()) {
+            return false;
+        }
+        ShowFileHashDialog(paths);
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+bool TabBarHost::OpenSelectedInNewTab(bool activate) {
+    auto paths = GetSelectedPaths();
+    if(paths.empty()) {
+        return false;
+    }
+    bool opened = false;
+    bool first = true;
+    for(const auto& path : paths) {
+        auto target = ResolveFolderPathForAction(path);
+        if(!target) {
+            continue;
+        }
+        OpenFolderInNewTab(*target, activate && first);
+        opened = true;
+        first = false;
+    }
+    return opened;
+}
+
+bool TabBarHost::OpenSelectedInNewWindow() {
+    auto paths = GetSelectedPaths();
+    if(paths.empty()) {
+        return false;
+    }
+    bool opened = false;
+    for(const auto& path : paths) {
+        auto target = ResolveFolderPathForAction(path);
+        if(!target) {
+            continue;
+        }
+        OpenNewWindowAtPath(*target);
+        opened = true;
+    }
+    return opened;
+}
+
+bool TabBarHost::InvokeShellVerb(const wchar_t* verb) {
+    if(!verb) {
+        return false;
+    }
+    CComPtr<IContextMenu> menu = GetSelectionContextMenu();
+    if(!menu) {
+        return false;
+    }
+    CMINVOKECOMMANDINFOEX info{};
+    info.cbSize = sizeof(info);
+    info.fMask = CMIC_MASK_UNICODE;
+    info.hwnd = m_hWnd;
+    info.lpVerbW = verb;
+    info.nShow = SW_SHOWNORMAL;
+    return SUCCEEDED(menu->InvokeCommand(reinterpret_cast<LPCMINVOKECOMMANDINFO>(&info)));
+}
+
+void TabBarHost::ShowFileHashDialog(const std::vector<std::wstring>& paths) const {
+    std::wstring content;
+    if(paths.empty()) {
+        content = L"No files selected.";
+    } else {
+        for(size_t i = 0; i < paths.size(); ++i) {
+            content.append(paths[i]);
+            content.append(L"\n    ");
+            if(auto hash = ComputeFileHash(paths[i])) {
+                content.append(*hash);
+            } else {
+                content.append(L"(error)");
+            }
+            if(i + 1 < paths.size()) {
+                content.append(L"\n\n");
+            }
+        }
+    }
+
+    TASKDIALOGCONFIG config{};
+    config.cbSize = sizeof(config);
+    config.hwndParent = m_owner.GetHostWindow();
+    config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
+    config.dwCommonButtons = TDCBF_OK_BUTTON;
+    config.pszWindowTitle = L"QTTabBar";
+    config.pszMainInstruction = L"MD5 Checksum";
+    config.pszContent = content.c_str();
+    if(FAILED(::TaskDialogIndirect(&config, nullptr, nullptr, nullptr))) {
+        ::MessageBoxW(m_hWnd, content.c_str(), L"MD5 Checksum", MB_OK | MB_ICONINFORMATION);
+    }
+}
+
+std::optional<std::wstring> TabBarHost::ComputeFileHash(const std::wstring& path) const {
+    HANDLE file = ::CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if(file == INVALID_HANDLE_VALUE) {
+        DWORD error = ::GetLastError();
+        InstanceManager::Instance().Log(L"ComputeFileHash(CreateFile) failed for '%s' (err=%lu)",
+                                        path.c_str(), error);
+        return std::nullopt;
+    }
+
+    HCRYPTPROV provider = 0;
+    if(!::CryptAcquireContextW(&provider, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
+        DWORD error = ::GetLastError();
+        InstanceManager::Instance().Log(L"ComputeFileHash(CryptAcquireContext) failed for '%s' (err=%lu)",
+                                        path.c_str(), error);
+        ::CloseHandle(file);
+        return std::nullopt;
+    }
+
+    HCRYPTHASH hash = 0;
+    if(!::CryptCreateHash(provider, CALG_MD5, 0, 0, &hash)) {
+        DWORD error = ::GetLastError();
+        InstanceManager::Instance().Log(L"ComputeFileHash(CryptCreateHash) failed for '%s' (err=%lu)",
+                                        path.c_str(), error);
+        ::CryptReleaseContext(provider, 0);
+        ::CloseHandle(file);
+        return std::nullopt;
+    }
+
+    std::array<BYTE, 4096> buffer{};
+    DWORD read = 0;
+    bool failed = false;
+    while(true) {
+        if(!::ReadFile(file, buffer.data(), static_cast<DWORD>(buffer.size()), &read, nullptr)) {
+            DWORD error = ::GetLastError();
+            InstanceManager::Instance().Log(L"ComputeFileHash(ReadFile) failed for '%s' (err=%lu)",
+                                            path.c_str(), error);
+            failed = true;
+            break;
+        }
+        if(read == 0) {
+            break;
+        }
+        if(!::CryptHashData(hash, buffer.data(), read, 0)) {
+            failed = true;
+            DWORD error = ::GetLastError();
+            InstanceManager::Instance().Log(L"ComputeFileHash(CryptHashData) failed for '%s' (err=%lu)",
+                                            path.c_str(), error);
+            break;
+        }
+    }
+
+    std::wstring result;
+    if(!failed) {
+        DWORD hashSize = 0;
+        DWORD size = sizeof(hashSize);
+        if(::CryptGetHashParam(hash, HP_HASHSIZE, reinterpret_cast<BYTE*>(&hashSize), &size, 0) && hashSize > 0) {
+            std::vector<BYTE> digest(hashSize);
+            if(::CryptGetHashParam(hash, HP_HASHVAL, digest.data(), &hashSize, 0)) {
+                wchar_t chunk[3];
+                for(DWORD i = 0; i < hashSize; ++i) {
+                    swprintf_s(chunk, L"%02X", digest[i]);
+                    result.append(chunk);
+                }
+            } else {
+                DWORD error = ::GetLastError();
+                InstanceManager::Instance().Log(L"ComputeFileHash(CryptGetHashParam HASHVAL) failed for '%s' (err=%lu)",
+                                                path.c_str(), error);
+                failed = true;
+            }
+        } else {
+            DWORD error = ::GetLastError();
+            InstanceManager::Instance().Log(L"ComputeFileHash(CryptGetHashParam HASHSIZE) failed for '%s' (err=%lu)",
+                                            path.c_str(), error);
+            failed = true;
+        }
+    }
+
+    ::CryptDestroyHash(hash);
+    ::CryptReleaseContext(provider, 0);
+    ::CloseHandle(file);
+
+    if(result.empty()) {
+        if(!failed) {
+            InstanceManager::Instance().Log(L"ComputeFileHash produced empty result for '%s'", path.c_str());
+        }
+        return std::nullopt;
+    }
+    return result;
+}
+
+std::vector<std::wstring> TabBarHost::GetSelectedPaths() const {
+    std::vector<std::wstring> result;
+    CComPtr<IDataObject> data = GetSelectionDataObject();
+    if(!data) {
+        return result;
+    }
+    FORMATETC format{CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+    STGMEDIUM medium{};
+    if(FAILED(data->GetData(&format, &medium))) {
+        return result;
+    }
+    HDROP drop = static_cast<HDROP>(::GlobalLock(medium.hGlobal));
+    if(drop) {
+        UINT count = ::DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+        for(UINT i = 0; i < count; ++i) {
+            UINT length = ::DragQueryFileW(drop, i, nullptr, 0);
+            if(length == 0) {
+                continue;
+            }
+            std::wstring path;
+            path.resize(length + 1);
+            UINT copied = ::DragQueryFileW(drop, i, path.data(), length + 1);
+            if(copied > 0) {
+                path.resize(copied);
+                result.push_back(std::move(path));
+            }
+        }
+        ::GlobalUnlock(medium.hGlobal);
+    }
+    ::ReleaseStgMedium(&medium);
+    return result;
+}
+
+std::vector<std::wstring> TabBarHost::GetSelectedNames() const {
+    auto paths = GetSelectedPaths();
+    std::vector<std::wstring> names;
+    names.reserve(paths.size());
+    for(const auto& path : paths) {
+        const wchar_t* name = PathFindFileNameW(path.c_str());
+        names.emplace_back(name && *name ? name : path);
+    }
+    return names;
+}
+
+std::optional<std::wstring> TabBarHost::ResolveShortcutTarget(const std::wstring& path) const {
+    if(path.empty()) {
+        return std::nullopt;
+    }
+    CComPtr<IShellLinkW> link;
+    if(FAILED(::CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link))) || !link) {
+        return std::nullopt;
+    }
+    CComPtr<IPersistFile> persist;
+    if(FAILED(link->QueryInterface(IID_PPV_ARGS(&persist))) || !persist) {
+        return std::nullopt;
+    }
+    if(FAILED(persist->Load(path.c_str(), STGM_READ))) {
+        return std::nullopt;
+    }
+    wchar_t resolved[MAX_PATH] = {};
+    WIN32_FIND_DATAW data{};
+    if(SUCCEEDED(link->GetPath(resolved, ARRAYSIZE(resolved), &data, SLGP_RAWPATH)) && resolved[0] != L'\0') {
+        return std::wstring(resolved);
+    }
+    return std::nullopt;
+}
+
+std::optional<std::wstring> TabBarHost::ResolveFolderPathForAction(const std::wstring& path) const {
+    if(path.empty()) {
+        return std::nullopt;
+    }
+    std::wstring candidate = path;
+    DWORD attr = ::GetFileAttributesW(candidate.c_str());
+    if(attr == INVALID_FILE_ATTRIBUTES || (attr & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+        if(_wcsicmp(PathFindExtensionW(candidate.c_str()), L".lnk") == 0) {
+            if(auto resolved = ResolveShortcutTarget(candidate)) {
+                candidate = *resolved;
+                attr = ::GetFileAttributesW(candidate.c_str());
+            }
+        }
+    }
+    if(attr == INVALID_FILE_ATTRIBUTES || (attr & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+        return std::nullopt;
+    }
+    return candidate;
+}
+
+CComPtr<IShellBrowser> TabBarHost::GetShellBrowser() const {
+    if(!m_spBrowser) {
+        return nullptr;
+    }
+    CComPtr<IServiceProvider> provider;
+    if(FAILED(m_spBrowser->QueryInterface(IID_PPV_ARGS(&provider))) || !provider) {
+        return nullptr;
+    }
+    CComPtr<IShellBrowser> browser;
+    provider->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&browser));
+    return browser;
+}
+
+CComPtr<IShellView> TabBarHost::GetShellView() const {
+    CComPtr<IShellBrowser> browser = GetShellBrowser();
+    if(!browser) {
+        return nullptr;
+    }
+    CComPtr<IShellView> view;
+    browser->QueryActiveShellView(&view);
+    return view;
+}
+
+CComPtr<IDataObject> TabBarHost::GetSelectionDataObject() const {
+    CComPtr<IShellView> view = GetShellView();
+    if(!view) {
+        return nullptr;
+    }
+    CComPtr<IDataObject> data;
+    view->GetItemObject(SVGIO_SELECTION, IID_PPV_ARGS(&data));
+    return data;
+}
+
+CComPtr<IContextMenu> TabBarHost::GetSelectionContextMenu() const {
+    CComPtr<IShellView> view = GetShellView();
+    if(!view) {
+        return nullptr;
+    }
+    CComPtr<IContextMenu> menu;
+    view->GetItemObject(SVGIO_SELECTION, IID_PPV_ARGS(&menu));
+    return menu;
+}
+
+QTButtonBar* TabBarHost::GetButtonBar() const {
+    QTTabBarClass* ownerClass = dynamic_cast<QTTabBarClass*>(&m_owner);
+    if(!ownerClass) {
+        return nullptr;
+    }
+    return InstanceManagerNative::Instance().FindButtonBar(ownerClass->m_explorerHwnd);
+}
+
+bool TabBarHost::SelectInExplorer(const std::wstring& path, bool edit) const {
+    CComPtr<IShellView> view = GetShellView();
+    if(!view) {
+        return false;
+    }
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    if(FAILED(::SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr)) || !pidl) {
+        return false;
+    }
+    PCUITEMID_CHILD child = ILFindLastID(pidl);
+    if(child == nullptr) {
+        ::CoTaskMemFree(pidl);
+        return false;
+    }
+    UINT flags = SVSI_SELECT | SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE;
+    if(edit) {
+        flags |= SVSI_EDIT;
+    }
+    HRESULT hr = view->SelectItem(child, flags);
+    ::CoTaskMemFree(pidl);
+    return SUCCEEDED(hr);
+}
+
+bool TabBarHost::FocusExplorerSearch() {
+    QTTabBarClass* ownerClass = dynamic_cast<QTTabBarClass*>(&m_owner);
+    if(!ownerClass || !ownerClass->m_explorerHwnd) {
+        return false;
+    }
+    ::SetForegroundWindow(ownerClass->m_explorerHwnd);
+    INPUT inputs[4] = {};
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = VK_CONTROL;
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = 'E';
+    inputs[2].type = INPUT_KEYBOARD;
+    inputs[2].ki.wVk = 'E';
+    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[3].type = INPUT_KEYBOARD;
+    inputs[3].ki.wVk = VK_CONTROL;
+    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+    return ::SendInput(static_cast<UINT>(std::size(inputs)), inputs, sizeof(INPUT)) == std::size(inputs);
+}
+
+bool TabBarHost::ShowTabSubfolderMenu(std::size_t index) {
+    if(!m_tabControl || index >= m_tabControl->GetCount()) {
+        return false;
+    }
+    std::wstring path = m_tabControl->GetPath(index);
+    if(path.empty()) {
+        return false;
+    }
+    if(!m_subDirTipWindow) {
+        m_subDirTipWindow = std::make_unique<SubDirTipWindow>(*this);
+    }
+    m_subDirTipWindow->ApplyConfiguration(m_config);
+    POINT anchor{};
+    if(auto bounds = m_tabControl->GetTabBounds(index)) {
+        anchor.x = bounds->left;
+        anchor.y = bounds->bottom;
+    } else {
+        anchor = m_subDirTipAnchor;
+    }
+    return m_subDirTipWindow->ShowAndExecute(path, anchor, SubDirTipWindow::Command::Open, true);
 }
 
 void TabBarHost::OnTabControlTabSelected(std::size_t index) {
