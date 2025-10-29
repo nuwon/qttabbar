@@ -44,6 +44,7 @@ public:
 
     void ApplyConfiguration(const qttabbar::ConfigData& config);
     bool ShowForPath(const std::wstring& path, const POINT& anchor, bool byKeyboard);
+    bool ShowAndExecute(const std::wstring& path, const POINT& anchor, Command command, bool byKeyboard);
     void HideTip();
     void ClearThumbnailCache();
 

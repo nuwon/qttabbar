@@ -54,6 +54,8 @@ public:
     HRESULT FinalConstruct();
     void FinalRelease();
 
+    bool InvokeCommand(UINT commandId);
+
     // IOleWindow
     IFACEMETHODIMP GetWindow(HWND* phwnd) override;
     IFACEMETHODIMP ContextSensitiveHelp(BOOL fEnterMode) override;

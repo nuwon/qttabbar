@@ -276,6 +276,37 @@ std::wstring NativeTabControl::GetPath(std::size_t index) const {
     return m_tabs[index].path;
 }
 
+std::optional<RECT> NativeTabControl::GetTabBounds(std::size_t index) const {
+    if(index >= m_tabs.size()) {
+        return std::nullopt;
+    }
+    RECT rect = m_tabs[index].metrics.bounds;
+    POINT topLeft{rect.left, rect.top};
+    POINT bottomRight{rect.right, rect.bottom};
+    ::ClientToScreen(m_hWnd, &topLeft);
+    ::ClientToScreen(m_hWnd, &bottomRight);
+    rect.left = topLeft.x;
+    rect.top = topLeft.y;
+    rect.right = bottomRight.x;
+    rect.bottom = bottomRight.y;
+    return rect;
+}
+
+std::vector<std::wstring> NativeTabControl::GetTabDisplayNames() const {
+    std::vector<std::wstring> names;
+    names.reserve(m_tabs.size());
+    for(const auto& tab : m_tabs) {
+        if(!tab.alias.empty()) {
+            names.push_back(tab.alias);
+        } else if(!tab.title.empty()) {
+            names.push_back(tab.title);
+        } else {
+            names.push_back(tab.path);
+        }
+    }
+    return names;
+}
+
 std::vector<NativeTabControl::SwitchEntry> NativeTabControl::GetSwitchEntries() {
     std::vector<SwitchEntry> entries;
     entries.reserve(m_tabs.size());

@@ -119,6 +119,14 @@ void QTButtonBar::FinalRelease() {
     m_spSite.Release();
 }
 
+bool QTButtonBar::InvokeCommand(UINT commandId) {
+    if(m_hWnd == nullptr) {
+        return false;
+    }
+    ::SendMessageW(m_hWnd, WM_COMMAND, commandId, 0);
+    return true;
+}
+
 HRESULT QTButtonBar::EnsureWindow() {
     if(m_hWnd != nullptr) {
         return S_OK;

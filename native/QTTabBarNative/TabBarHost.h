@@ -18,6 +18,11 @@ class SubDirTipWindow;
 class NativeTabControl;
 class TabSwitchOverlay;
 
+interface IShellBrowser;
+interface IShellView;
+interface IDataObject;
+interface IContextMenu;
+
 class ITabBarHostOwner {
 public:
     virtual ~ITabBarHostOwner() = default;
@@ -216,6 +221,38 @@ private:
     void NavigateToPath(const std::wstring& path);
     void ShowSubDirTip(std::size_t tabIndex);
     void HideSubDirTip();
+    bool BrowseForFolder();
+    bool ShowToolbarMenu();
+    bool ShowTabMenuAtIndex(std::optional<std::size_t> index, const POINT& point);
+    bool ShowTabMenuAtCursor();
+    bool ShowButtonBarMenu(UINT commandId);
+    bool DoFileTools(int index);
+    bool ToggleTopMost();
+    bool AdjustTransparency(bool increase);
+    bool FocusSearchBand();
+    bool FocusButtonBarSearch();
+    bool ShowSelectedSubDirTip();
+    bool SendWindowToTray();
+    bool MergeAllWindows();
+    bool CreateNewItem(bool isFolder);
+    bool ExecuteItemCommand(qttabbar::BindAction action);
+    bool OpenSelectedInNewTab(bool activate);
+    bool OpenSelectedInNewWindow();
+    bool InvokeShellVerb(const wchar_t* verb);
+    void ShowFileHashDialog(const std::vector<std::wstring>& paths) const;
+    std::optional<std::wstring> ComputeFileHash(const std::wstring& path) const;
+    std::vector<std::wstring> GetSelectedPaths() const;
+    std::vector<std::wstring> GetSelectedNames() const;
+    std::optional<std::wstring> ResolveShortcutTarget(const std::wstring& path) const;
+    std::optional<std::wstring> ResolveFolderPathForAction(const std::wstring& path) const;
+    CComPtr<IShellBrowser> GetShellBrowser() const;
+    CComPtr<IShellView> GetShellView() const;
+    CComPtr<IDataObject> GetSelectionDataObject() const;
+    CComPtr<IContextMenu> GetSelectionContextMenu() const;
+    QTButtonBar* GetButtonBar() const;
+    bool SelectInExplorer(const std::wstring& path, bool edit) const;
+    bool FocusExplorerSearch();
+    bool ShowTabSubfolderMenu(std::size_t index);
 
     ITabBarHostOwner& m_owner;
     CComPtr<IWebBrowser2> m_spBrowser;
